@@ -17,6 +17,12 @@ use Illuminate\Support\Facades\Route;
 
 // Public routes
 Route::prefix('v1')->group(function () {
+    Route::get('/', function () {
+        return response()->json([
+            'success' => true,
+            'message' => 'Easygear API is running'
+        ]);
+    });
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
