@@ -46,15 +46,29 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
+        // Store token in HTTP-only cookie
+        $response = response()->json([
             'success' => true,
             'message' => 'User registered successfully',
             'data' => [
-                'user' => $user,
-                'access_token' => $token,
-                'token_type' => 'Bearer'
+                'user' => $user->load('addresses')
             ]
         ], 201);
+
+        // Set access token cookie (HTTP-only for security)
+        $response->cookie(
+            'access_token',
+            $token,
+            config('session.lifetime', 120), // Cookie lifetime in minutes
+            '/', // Path
+            null, // Domain
+            true, // Secure (HTTPS only in production)
+            true, // HTTP-only
+            false, // Raw
+            'Strict' // SameSite
+        );
+
+        return $response;
     }
 
     /**
@@ -96,15 +110,29 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
+        // Store token in HTTP-only cookie
+        $response = response()->json([
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => $user,
-                'access_token' => $token,
-                'token_type' => 'Bearer'
+                'user' => $user->load('addresses')
             ]
         ], 200);
+
+        // Set access token cookie (HTTP-only for security)
+        $response->cookie(
+            'access_token',
+            $token,
+            config('session.lifetime', 120), // Cookie lifetime in minutes
+            '/', // Path
+            null, // Domain
+            request()->secure(), // Secure (HTTPS only in production)
+            true, // HTTP-only
+            false, // Raw
+            'Strict' // SameSite
+        );
+
+        return $response;
     }
 
     /**
@@ -198,10 +226,25 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json([
+        $response = response()->json([
             'success' => true,
             'message' => 'Logged out successfully'
         ], 200);
+
+        // Clear the access token cookie
+        $response->cookie(
+            'access_token',
+            '',
+            -1, // Expire immediately
+            '/',
+            null,
+            request()->secure(),
+            true,
+            false,
+            'Strict'
+        );
+
+        return $response;
     }
 
     /**
@@ -211,9 +254,68 @@ class AuthController extends Controller
     {
         $request->user()->tokens()->delete();
 
-        return response()->json([
+        $response = response()->json([
             'success' => true,
             'message' => 'Logged out from all devices successfully'
         ], 200);
+
+        // Clear the access token cookie
+        $response->cookie(
+            'access_token',
+            '',
+            -1, // Expire immediately
+            '/',
+            null,
+            request()->secure(),
+            true,
+            false,
+            'Strict'
+        );
+
+        return $response;
+    }
+
+    /**
+     * Refresh access token
+     */
+    public function refreshToken(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 401);
+        }
+
+        // Delete the current token
+        $request->user()->currentAccessToken()->delete();
+
+        // Create a new token
+        $newToken = $user->createToken('auth_token')->plainTextToken;
+
+        $response = response()->json([
+            'success' => true,
+            'message' => 'Token refreshed successfully',
+            'data' => [
+                'user' => $user
+            ]
+        ], 200);
+
+        // Set new access token cookie
+        $response->cookie(
+            'access_token',
+            $newToken,
+            config('session.lifetime', 120),
+            '/',
+            null,
+            request()->secure(),
+            true,
+            false,
+            'Strict'
+        );
+
+        return $response;
     }
 }

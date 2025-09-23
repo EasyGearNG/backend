@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\WaitlistController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,10 @@ Route::prefix('v1')->group(function () {
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    
+    // Waitlist routes
+    Route::post('/waitlist/join', [WaitlistController::class, 'join']);
+    Route::post('/waitlist/check-email', [WaitlistController::class, 'checkEmail']);
 });
 
 // Protected routes
@@ -34,8 +39,14 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
+    Route::post('/refresh-token', [AuthController::class, 'refreshToken']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/logout-all', [AuthController::class, 'logoutAll']);
+
+    // Waitlist routes (admin only)
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
+    });
 
     // User info route
     Route::get('/user', function (Request $request) {
