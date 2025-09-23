@@ -20,23 +20,28 @@ This is the backend API for EasyGear, Nigeria's one-stop shop for sports gear. T
 ### ✅ Authentication System
 - **User Registration** - Customer and vendor registration
 - **User Login** - Login with email or username
-- **JWT Tokens** - API authentication using Laravel Sanctum
+- **Cookie-based Authentication** - Secure HTTP-only cookies using Laravel Sanctum
 - **Profile Management** - Update profile and change password
+- **Token Refresh** - Automatic token refresh functionality
 - **Role-based Access** - Admin, customer, and vendor roles
+- **Enhanced Security** - XSS and CSRF protection
 
 ### ✅ API Endpoints
 
 #### Authentication Endpoints
 ```
-POST /api/v1/register         - Register new user
-POST /api/v1/login           - User login
+POST /api/v1/register         - Register new user (sets auth cookie)
+POST /api/v1/login           - User login (sets auth cookie)
 GET  /api/v1/profile         - Get user profile (protected)
 PUT  /api/v1/profile         - Update profile (protected)
 POST /api/v1/change-password - Change password (protected)
-POST /api/v1/logout          - Logout (protected)
+POST /api/v1/refresh-token   - Refresh auth token (protected)
+POST /api/v1/logout          - Logout (clears auth cookie)
 POST /api/v1/logout-all      - Logout from all devices (protected)
 GET  /api/v1/user           - Get current user (protected)
 ```
+
+**Note**: All authentication now uses HTTP-only cookies for enhanced security. No need to manually include Authorization headers!
 
 ## Installation & Setup
 
@@ -111,13 +116,14 @@ curl -X POST http://localhost:8000/api/v1/login \
   -d '{
     "login": "johndoe",
     "password": "password123"
-  }'
+  }' \
+  -c cookies.txt  # Save cookies for subsequent requests
 ```
 
 ### Access Protected Endpoint
 ```bash
 curl -X GET http://localhost:8000/api/v1/profile \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+  -b cookies.txt  # Use saved cookies for authentication
 ```
 
 ## Database Schema Overview
