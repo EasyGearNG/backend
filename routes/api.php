@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
     // Waitlist routes
     Route::post('/waitlist/join', [WaitlistController::class, 'join']);
     Route::post('/waitlist/check-email', [WaitlistController::class, 'checkEmail']);
+    Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
 });
 
 // Protected routes
@@ -45,7 +46,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Waitlist routes (admin only)
     Route::middleware('role:admin')->group(function () {
-        Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
+        // Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
     });
 
     // User info route

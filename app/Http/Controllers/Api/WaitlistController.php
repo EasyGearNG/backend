@@ -7,6 +7,7 @@ use App\Models\Waitlist;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 
 class WaitlistController extends Controller
 {
@@ -74,20 +75,41 @@ class WaitlistController extends Controller
      */
     public function stats(Request $request)
     {
-        $total = Waitlist::count();
-        $recent = Waitlist::recent(7)->count();
-        $today = Waitlist::whereDate('created_at', today())->count();
+        try {
+            $total = Waitlist::count();
+            $recent = Waitlist::recent(7)->count();
+            $today = Waitlist::whereDate('created_at', today())->count();
+            $allSignups = Waitlist::all();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Waitlist statistics retrieved successfully',
-            'data' => [
-                'total_signups' => $total,
-                'recent_signups' => $recent, // Last 7 days
-                'today_signups' => $today,
-                'growth_rate' => $total > 0 ? round(($recent / $total) * 100, 2) : 0,
-            ]
-        ], 200);
+            Log::info('Waitlist statistics retrieved successfully', [
+                'total' => $total,
+                'recent' => $recent,
+                'today' => $today
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Waitlist statistics retrieved successfully',
+                'data' => [
+                    'total_signups' => $total,
+                    'recent_signups' => $recent, // Last 7 days
+                    'today_signups' => $today,
+                    'growth_rate' => $total > 0 ? round(($recent / $total) * 100, 2) : 0,
+                    'all_signups' => $allSignups,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Error retrieving waitlist statistics', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve waitlist statistics',
+            ], 500);
+        }
     }
 
     /**
