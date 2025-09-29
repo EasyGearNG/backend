@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Register role middleware alias
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'vendor' => \App\Http\Middleware\VendorMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

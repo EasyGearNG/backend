@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\WaitlistController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\VendorProductController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +26,7 @@ Route::prefix('v1')->group(function () {
             'message' => 'Easygear API is running'
         ]);
     });
+    
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
@@ -32,6 +35,16 @@ Route::prefix('v1')->group(function () {
     Route::post('/waitlist/join', [WaitlistController::class, 'join']);
     Route::post('/waitlist/check-email', [WaitlistController::class, 'checkEmail']);
     Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
+    
+    // Public Product routes (no authentication required)
+    Route::prefix('products')->group(function () {
+        Route::get('/', [ProductController::class, 'index']); // List all products with filtering
+        Route::get('/featured', [ProductController::class, 'featured']); // Get featured products
+        Route::get('/search', [ProductController::class, 'search']); // Search products
+        Route::get('/category/{categoryId}', [ProductController::class, 'byCategory']); // Products by category
+        Route::get('/vendor/{vendorId}', [ProductController::class, 'byVendor']); // Products by vendor
+        Route::get('/{slug}', [ProductController::class, 'show']); // Get single product details by slug
+    });
 });
 
 // Protected routes
@@ -57,5 +70,16 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
                 'user' => $request->user()
             ]
         ]);
+    });
+    
+    // Vendor Product Management Routes (vendors only)
+    Route::prefix('vendor/products')->middleware('vendor')->group(function () {
+        Route::get('/', [VendorProductController::class, 'index']); // List vendor's products
+        Route::post('/', [VendorProductController::class, 'store']); // Create new product
+        Route::get('/stats', [VendorProductController::class, 'stats']); // Get product statistics
+        Route::get('/{id}', [VendorProductController::class, 'show']); // Get specific product
+        Route::put('/{id}', [VendorProductController::class, 'update']); // Update product
+        Route::delete('/{id}', [VendorProductController::class, 'destroy']); // Delete product
+        Route::patch('/{id}/stock', [VendorProductController::class, 'updateStock']); // Update stock only
     });
 });

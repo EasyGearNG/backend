@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Vendor extends Model
 {
     protected $fillable = [
+        'user_id',
         'name',
         'contact_email',
         'contact_phone',
@@ -22,6 +24,14 @@ class Vendor extends Model
         'commission_rate' => 'decimal:2',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Get the user that owns this vendor profile.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     /**
      * Get the products for this vendor.
