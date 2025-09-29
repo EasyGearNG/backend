@@ -83,4 +83,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(Review::class);
     }
+
+    /**
+     * Get the vendor profile for this user (if user is a vendor)
+     */
+    public function vendor()
+    {
+        return $this->hasOne(Vendor::class);
+    }
 }

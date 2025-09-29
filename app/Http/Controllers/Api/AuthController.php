@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -24,6 +25,11 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
             'phone_number' => 'nullable|string|max:15',
             'role' => 'in:customer,vendor',
+            
+            // Vendor-specific fields (required if role is vendor)
+            'business_name' => 'required_if:role,vendor|string|max:255',
+            'business_address' => 'required_if:role,vendor|string|max:500',
+            'business_phone' => 'required_if:role,vendor|string|max:15',
         ]);
 
         if ($validator->fails()) {
@@ -43,6 +49,19 @@ class AuthController extends Controller
             'role' => $request->role ?? 'customer',
             'is_active' => true,
         ]);
+
+        // Create vendor profile if user is registering as a vendor
+        if ($request->role === 'vendor') {
+            Vendor::create([
+                'user_id' => $user->id,
+                'name' => $request->business_name,
+                'contact_email' => $user->email,
+                'contact_phone' => $request->business_phone,
+                'address' => $request->business_address,
+                'commission_rate' => 15.00, // Default commission rate
+                'is_active' => true,
+            ]);
+        }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 

@@ -79,7 +79,7 @@ class WaitlistController extends Controller
             $total = Waitlist::count();
             $recent = Waitlist::recent(7)->count();
             $today = Waitlist::whereDate('created_at', today())->count();
-            $allSignups = Waitlist::all();
+            // $allSignups = Waitlist::all();
 
             Log::info('Waitlist statistics retrieved successfully', [
                 'total' => $total,
@@ -95,7 +95,7 @@ class WaitlistController extends Controller
                     'recent_signups' => $recent, // Last 7 days
                     'today_signups' => $today,
                     'growth_rate' => $total > 0 ? round(($recent / $total) * 100, 2) : 0,
-                    'all_signups' => $allSignups,
+                    // 'all_signups' => $allSignups,
                 ]
             ], 200);
 
