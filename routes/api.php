@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AuthStatusController;
+use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\WaitlistController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\VendorProductController;
@@ -30,6 +34,8 @@ Route::prefix('v1')->group(function () {
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available
+    Route::get('/auth/check', [AuthStatusController::class, 'check']);
     
     // Waitlist routes
     Route::post('/waitlist/join', [WaitlistController::class, 'join']);
@@ -61,6 +67,48 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         // Route::get('/waitlist/stats', [WaitlistController::class, 'stats']);
     });
+    
+    // Admin routes (admin only)
+    Route::prefix('admin')->middleware('role:admin')->group(function () {
+        // Dashboard & Analytics
+        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/revenue-analytics', [AdminController::class, 'revenueAnalytics']);
+        
+        // User Management
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/users/{id}', [AdminController::class, 'showUser']);
+        Route::put('/users/{id}', [AdminController::class, 'updateUser']);
+        Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+        
+        // Order Management
+        Route::get('/orders', [AdminController::class, 'orders']);
+        Route::get('/orders/{id}', [AdminController::class, 'showOrder']);
+        Route::patch('/orders/{id}/status', [AdminController::class, 'updateOrderStatus']);
+        
+        // Product Management
+        Route::get('/products', [AdminController::class, 'products']);
+        Route::get('/products/{id}', [AdminController::class, 'showProduct']);
+        Route::post('/products', [AdminController::class, 'createProduct']);
+        Route::put('/products/{id}', [AdminController::class, 'updateProduct']);
+        Route::patch('/products/{id}/status', [AdminController::class, 'updateProductStatus']);
+        Route::patch('/products/{id}/stock', [AdminController::class, 'updateProductStock']);
+        Route::patch('/products/{id}/featured', [AdminController::class, 'toggleProductFeatured']);
+        Route::delete('/products/{id}', [AdminController::class, 'deleteProduct']);
+        
+        // Vendor Management
+        Route::get('/vendors', [AdminController::class, 'vendors']);
+        Route::get('/vendors/{id}', [AdminController::class, 'showVendor']);
+        Route::patch('/vendors/{id}/status', [AdminController::class, 'updateVendorStatus']);
+        
+        // Payment Management
+        Route::get('/payments', [AdminController::class, 'payments']);
+        
+        // Category Management
+        Route::get('/categories', [AdminController::class, 'categories']);
+        Route::post('/categories', [AdminController::class, 'createCategory']);
+        Route::put('/categories/{id}', [AdminController::class, 'updateCategory']);
+        Route::delete('/categories/{id}', [AdminController::class, 'deleteCategory']);
+    });
 
     // User info route
     Route::get('/user', function (Request $request) {
@@ -70,6 +118,22 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
                 'user' => $request->user()
             ]
         ]);
+    });
+    
+    // Cart routes (authenticated users)
+    Route::prefix('cart')->group(function () {
+        Route::get('/', [CartController::class, 'index']); // Get cart
+        Route::post('/add', [CartController::class, 'addItem']); // Add item to cart
+        Route::put('/items/{itemId}', [CartController::class, 'updateItem']); // Update cart item quantity
+        Route::delete('/items/{itemId}', [CartController::class, 'removeItem']); // Remove item from cart
+        Route::delete('/clear', [CartController::class, 'clear']); // Clear all cart items
+    });
+    
+    // Checkout routes (authenticated users)
+    Route::prefix('checkout')->group(function () {
+        Route::get('/summary', [CheckoutController::class, 'getCheckoutSummary']); // Get checkout summary
+        Route::post('/initialize', [CheckoutController::class, 'initializeCheckout']); // Initialize checkout
+        Route::post('/verify', [CheckoutController::class, 'verifyPayment']); // Verify payment
     });
     
     // Vendor Product Management Routes (vendors only)
