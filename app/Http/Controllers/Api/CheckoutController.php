@@ -120,13 +120,14 @@ class CheckoutController extends Controller
                 ], 500);
             }
 
-            // Create payment record
+            // Create payment record with idempotency key
             Payment::create([
                 'order_id' => $order->id,
                 'amount' => $totalAmount,
                 'payment_method' => 'card',
                 'status' => 'pending',
                 'transaction_id' => $paymentData['reference'],
+                'idempotency_key' => $this->generateIdempotencyKey($order->id, $user->id),
                 'gateway_response' => $paymentData['data'],
             ]);
 
@@ -155,7 +156,7 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Verify payment and complete order.
+     * Verify payment and complete order (idempotent).
      */
     public function verifyPayment(Request $request): JsonResponse
     {
@@ -172,6 +173,38 @@ class CheckoutController extends Controller
         }
 
         try {
+            // Find payment record with lock to prevent race conditions
+            $payment = Payment::where('transaction_id', $request->reference)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$payment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment record not found',
+                ], 404);
+            }
+
+            // IDEMPOTENCY CHECK: If already processed, return the existing result
+            if ($payment->isProcessed()) {
+                $order = $payment->order;
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => $payment->status === 'success' 
+                        ? 'Payment already verified successfully' 
+                        : 'Payment already processed as failed',
+                    'data' => [
+                        'order_id' => $order->id,
+                        'payment_status' => $payment->status,
+                        'order_status' => $order->status,
+                        'amount' => $payment->amount,
+                        'already_processed' => true,
+                        'processed_at' => $payment->processed_at,
+                    ],
+                ]);
+            }
+
             // Verify payment with Paystack
             $verification = $this->verifyPaystackPayment($request->reference);
 
@@ -185,22 +218,13 @@ class CheckoutController extends Controller
 
             $paymentData = $verification['data'];
 
-            // Find payment record
-            $payment = Payment::where('transaction_id', $request->reference)->first();
-
-            if (!$payment) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment record not found',
-                ], 404);
-            }
-
             DB::beginTransaction();
 
-            // Update payment status
+            // Update payment status and mark as processed
             $payment->update([
                 'status' => $paymentData['status'] === 'success' ? 'success' : 'failed',
                 'payment_date' => now(),
+                'processed_at' => now(),
                 'gateway_response' => $paymentData,
             ]);
 
@@ -238,6 +262,7 @@ class CheckoutController extends Controller
                     'payment_status' => $payment->status,
                     'order_status' => $order->status,
                     'amount' => $payment->amount,
+                    'already_processed' => false,
                 ],
             ]);
         } catch (\Exception $e) {
@@ -385,6 +410,14 @@ class CheckoutController extends Controller
                 'message' => $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Generate idempotency key for payment.
+     */
+    private function generateIdempotencyKey(int $orderId, int $userId): string
+    {
+        return hash('sha256', "payment-{$orderId}-{$userId}-" . now()->timestamp);
     }
 
     /**
