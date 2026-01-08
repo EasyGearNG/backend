@@ -53,8 +53,8 @@ class AdminController extends Controller
                 ],
                 'vendors' => [
                     'total' => Vendor::count(),
-                    'active' => Vendor::where('status', 'active')->count(),
-                    'pending' => Vendor::where('status', 'pending')->count(),
+                    'active' => Vendor::where('is_active', true)->count(),
+                    'inactive' => Vendor::where('is_active', false)->count(),
                 ],
                 'payments' => [
                     'total' => Payment::sum('amount'),
@@ -861,7 +861,10 @@ class AdminController extends Controller
         }
 
         try {
-            $category = Category::create($request->only(['name', 'description']));
+            $data = $request->only(['name', 'description']);
+            $data['slug'] = Str::slug($request->name) . '-' . Str::random(8);
+            
+            $category = Category::create($data);
 
             return response()->json([
                 'success' => true,
@@ -897,7 +900,13 @@ class AdminController extends Controller
 
         try {
             $category = Category::findOrFail($id);
-            $category->update($request->only(['name', 'description']));
+            
+            $data = $request->only(['name', 'description']);
+            if ($request->has('name')) {
+                $data['slug'] = Str::slug($request->name) . '-' . Str::random(8);
+            }
+            
+            $category->update($data);
 
             return response()->json([
                 'success' => true,
