@@ -103,8 +103,8 @@ class CheckoutController extends Controller
                     'product_id' => $item->product_id,
                     'vendor_id' => $item->product->vendor_id,
                     'quantity' => $item->quantity,
-                    'price' => $item->product->price,
-                    'total' => $item->subtotal,
+                    'price_at_purchase' => $item->product->price,
+                    'subtotal' => $item->subtotal,
                 ]);
             }
 

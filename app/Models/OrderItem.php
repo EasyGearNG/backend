@@ -12,14 +12,16 @@ class OrderItem extends Model
         'product_id',
         'vendor_id',
         'quantity',
-        'price',
-        'total',
+        'price_at_purchase',
+        'subtotal',
+        'tracking_id',
+        'shipment_id',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
-        'price' => 'decimal:2',
-        'total' => 'decimal:2',
+        'price_at_purchase' => 'decimal:2',
+        'subtotal' => 'decimal:2',
     ];
 
     /**
@@ -44,5 +46,21 @@ class OrderItem extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Get the shipment associated with the order item.
+     */
+    public function shipment(): BelongsTo
+    {
+        return $this->belongsTo(Shipment::class);
+    }
+
+    /**
+     * Get the latest shipment update for this order item (via shipment).
+     */
+    public function latestShipmentUpdate()
+    {
+        return $this->shipment ? $this->shipment->updates()->latest()->first() : null;
     }
 }
