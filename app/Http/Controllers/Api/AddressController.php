@@ -84,13 +84,14 @@ class AddressController extends Controller
 
             $user = Auth::user();
 
-            // If setting as default, unset other defaults
-            if ($request->is_default) {
-                $user->addresses()->update(['is_default' => false]);
-            }
-
             // If this is the first address, make it default automatically
             $isFirstAddress = $user->addresses()->count() === 0;
+            $setAsDefault = $request->boolean('is_default') || $isFirstAddress;
+
+            // If setting as default, unset other defaults
+            if ($setAsDefault) {
+                $user->addresses()->update(['is_default' => false]);
+            }
 
             $address = $user->addresses()->create([
                 'address_line1' => $request->address_line1,
@@ -100,7 +101,7 @@ class AddressController extends Controller
                 'postal_code' => $request->postal_code,
                 'country' => $request->country,
                 'address_type' => $request->address_type,
-                'is_default' => $request->is_default || $isFirstAddress,
+                'is_default' => $setAsDefault,
             ]);
 
             DB::commit();
@@ -151,7 +152,7 @@ class AddressController extends Controller
             DB::beginTransaction();
 
             // If setting as default, unset other defaults
-            if ($request->is_default) {
+            if ($request->filled('is_default') && $request->boolean('is_default')) {
                 Auth::user()->addresses()->where('id', '!=', $id)->update(['is_default' => false]);
             }
 
