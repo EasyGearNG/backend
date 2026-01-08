@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthStatusController;
 use App\Http\Controllers\Api\CartController;
+use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\WaitlistController;
 use App\Http\Controllers\ProductController;
@@ -50,6 +52,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/category/{categoryId}', [ProductController::class, 'byCategory']); // Products by category
         Route::get('/vendor/{vendorId}', [ProductController::class, 'byVendor']); // Products by vendor
         Route::get('/{slug}', [ProductController::class, 'show']); // Get single product details by slug
+    });
+    
+    // Public Category routes
+    Route::prefix('categories')->group(function () {
+        Route::get('/', [CategoryController::class, 'index']); // List all categories
+        Route::get('/{id}', [CategoryController::class, 'show']); // Get single category
     });
 });
 
@@ -129,6 +137,16 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::delete('/clear', [CartController::class, 'clear']); // Clear all cart items
     });
     
+    // Address routes (authenticated users)
+    Route::prefix('addresses')->group(function () {
+        Route::get('/', [AddressController::class, 'index']); // Get all addresses
+        Route::post('/', [AddressController::class, 'store']); // Create new address
+        Route::get('/{id}', [AddressController::class, 'show']); // Get single address
+        Route::put('/{id}', [AddressController::class, 'update']); // Update address
+        Route::delete('/{id}', [AddressController::class, 'destroy']); // Delete address
+        Route::patch('/{id}/default', [AddressController::class, 'setDefault']); // Set as default address
+    });
+    
     // Checkout routes (authenticated users)
     Route::prefix('checkout')->group(function () {
         Route::get('/summary', [CheckoutController::class, 'getCheckoutSummary']); // Get checkout summary
@@ -136,6 +154,13 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/verify', [CheckoutController::class, 'verifyPayment']); // Verify payment
     });
     
+    // Shipment management and tracking
+    Route::prefix('shipments')->group(function () {
+        Route::post('/create', [\App\Http\Controllers\Api\ShipmentController::class, 'createShipment']); // Admin/driver: create shipment and assign order items
+        Route::post('/update', [\App\Http\Controllers\Api\ShipmentController::class, 'updateShipment']); // Admin/driver: update shipment location/status
+        Route::get('/track/{tracking_id}', [\App\Http\Controllers\Api\ShipmentController::class, 'trackByTrackingId']); // Customer: track by tracking_id
+    });
+
     // Vendor Product Management Routes (vendors only)
     Route::prefix('vendor/products')->middleware('vendor')->group(function () {
         Route::get('/', [VendorProductController::class, 'index']); // List vendor's products

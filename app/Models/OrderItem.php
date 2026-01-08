@@ -6,20 +6,33 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderItem extends Model
+
+    public function shipment(): BelongsTo
+    {
+        return $this->belongsTo(Shipment::class);
+    }
+
+    /**
+     * Get the latest shipment update for this order item (via shipment).
+     */
+    public function latestShipmentUpdate()
+    {
+        return $this->shipment ? $this->shipment->updates()->latest()->first() : null;
+    }
 {
     protected $fillable = [
         'order_id',
         'product_id',
         'vendor_id',
         'quantity',
-        'price',
-        'total',
+        'price_at_purchase',
+        'subtotal',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
-        'price' => 'decimal:2',
-        'total' => 'decimal:2',
+        'price_at_purchase' => 'decimal:2',
+        'subtotal' => 'decimal:2',
     ];
 
     /**
