@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\WaitlistController;
+use App\Http\Controllers\Api\PaystackWebhookController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\VendorProductController;
 use Illuminate\Http\Request;
@@ -59,6 +60,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/', [CategoryController::class, 'index']); // List all categories
         Route::get('/{id}', [CategoryController::class, 'show']); // Get single category
     });
+    
+    // Paystack Webhooks (public, no authentication)
+    Route::post('/webhooks/paystack/transfer', [PaystackWebhookController::class, 'handleTransferWebhook']);
 });
 
 // Protected routes
@@ -85,6 +89,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         // User Management
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{id}', [AdminController::class, 'showUser']);
+        Route::post('/users', [AdminController::class, 'createUser']);
         Route::put('/users/{id}', [AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
         
@@ -116,6 +121,23 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/categories', [AdminController::class, 'createCategory']);
         Route::put('/categories/{id}', [AdminController::class, 'updateCategory']);
         Route::delete('/categories/{id}', [AdminController::class, 'deleteCategory']);
+        
+        // Wallet Management
+        Route::get('/wallets/partners', [AdminController::class, 'getPartnerWallets']); // Get all partner wallets
+        Route::get('/wallets/partners/{partner}', [AdminController::class, 'getPartnerWallet']); // Get specific partner wallet with transactions
+        Route::get('/wallets/vendors', [AdminController::class, 'getVendorWallets']); // Get all vendor wallets
+        
+        // Logistics Company Management
+        Route::get('/logistics-companies', [AdminController::class, 'getLogisticsCompanies']); // Get all logistics companies with wallets
+        Route::post('/logistics-companies/{id}/payout', [AdminController::class, 'createLogisticsPayout']); // Create payout/withdrawal from logistics company wallet
+        
+        // Withdrawal Management
+        Route::get('/withdrawals', [AdminController::class, 'getWithdrawals']); // Get all withdrawals with filtering
+        Route::patch('/withdrawals/{id}/status', [AdminController::class, 'updateWithdrawalStatus']); // Update withdrawal status (processing/completed/failed)
+        
+        // Paystack Transfer Recipient Management
+        Route::get('/paystack/banks', [AdminController::class, 'getPaystackBanks']); // Get list of banks from Paystack
+        Route::post('/logistics-companies/{id}/paystack-recipient', [AdminController::class, 'createPaystackRecipient']); // Create Paystack recipient for logistics company
     });
 
     // User info route
@@ -171,4 +193,15 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::delete('/{id}', [VendorProductController::class, 'destroy']); // Delete product
         Route::patch('/{id}/stock', [VendorProductController::class, 'updateStock']); // Update stock only
     });
+
+    // Vendor Fulfillment & Wallet Routes (vendors only)
+    Route::prefix('vendor')->middleware('vendor')->group(function () {
+        Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders to dispatch
+        Route::post('/orders/{itemId}/dispatch', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'dispatchItem']); // Mark item as dispatched
+        Route::get('/wallet', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWallet']); // Get wallet balance and transactions
+        Route::get('/logistics-companies', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getLogisticsCompanies']); // Get available logistics companies
+    });
+
+    // Customer Order Confirmation
+    Route::post('/orders/items/{itemId}/confirm-delivery', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'confirmDelivery']); // Confirm delivery and release payment
 });
