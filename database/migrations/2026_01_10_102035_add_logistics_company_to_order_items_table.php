@@ -12,8 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('order_items', function (Blueprint $table) {
-            $table->foreignId('logistics_company_id')->nullable()->after('vendor_id')->constrained()->onDelete('set null');
-            $table->decimal('logistics_fee', 10, 2)->nullable()->after('logistics_company_id'); // Fee for this specific delivery
+            // Check if columns don't already exist before adding
+            if (!Schema::hasColumn('order_items', 'logistics_company_id')) {
+                $table->foreignId('logistics_company_id')->nullable()->constrained()->onDelete('set null');
+            }
+            if (!Schema::hasColumn('order_items', 'logistics_fee')) {
+                $table->decimal('logistics_fee', 10, 2)->nullable();
+            }
         });
     }
 
