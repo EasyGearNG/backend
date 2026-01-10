@@ -85,6 +85,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         // User Management
         Route::get('/users', [AdminController::class, 'users']);
         Route::get('/users/{id}', [AdminController::class, 'showUser']);
+        Route::post('/users', [AdminController::class, 'createUser']);
         Route::put('/users/{id}', [AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
         

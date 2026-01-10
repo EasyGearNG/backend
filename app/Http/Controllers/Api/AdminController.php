@@ -9,10 +9,12 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Payment;
 use App\Models\Category;
+use App\Mail\AdminInvitation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -177,6 +179,80 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update user',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create new user (including admin invites)
+     */
+    public function createUser(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8',
+            'phone_number' => 'sometimes|string|max:15',
+            'role' => 'required|in:customer,vendor,admin',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $plainPassword = $request->password;
+            
+            // Generate username from email
+            $username = explode('@', $request->email)[0] . '_' . Str::random(4);
+            
+            $userData = [
+                'name' => $request->name,
+                'username' => $username,
+                'email' => $request->email,
+                'password' => Hash::make($plainPassword),
+                'phone_number' => $request->phone_number,
+                'role' => $request->role,
+                'is_active' => $request->get('is_active', true),
+            ];
+
+            $user = User::create($userData);
+
+            // If creating a vendor, also create vendor record
+            if ($request->role === 'vendor' && $request->has('business_name')) {
+                Vendor::create([
+                    'user_id' => $user->id,
+                    'business_name' => $request->business_name,
+                    'business_address' => $request->business_address,
+                    'is_active' => true,
+                ]);
+            }
+
+            // Send invitation email if user is admin
+            if ($request->role === 'admin') {
+                try {
+                    Mail::to($user->email)->send(new AdminInvitation($user, $plainPassword));
+                } catch (\Exception $e) {
+                    // Log the error but don't fail the user creation
+                    \Log::warning('Failed to send admin invitation email: ' . $e->getMessage());
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User created successfully' . ($request->role === 'admin' ? '. Invitation email sent.' : ''),
+                'data' => $user,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create user',
                 'error' => $e->getMessage(),
             ], 500);
         }
