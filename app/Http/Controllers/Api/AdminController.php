@@ -9,7 +9,11 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Payment;
 use App\Models\Category;
+use App\Models\Wallet;
+use App\Models\LogisticsCompany;
+use App\Models\WalletWithdrawal;
 use App\Mail\AdminInvitation;
+use App\Services\PaystackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -763,12 +767,12 @@ class AdminController extends Controller
     }
 
     /**
-     * Update vendor status
+     * Update vendor status (Approve/Disapprove)
      */
     public function updateVendorStatus(Request $request, $id): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:active,inactive,pending,suspended',
+            'is_active' => 'required|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -780,13 +784,21 @@ class AdminController extends Controller
         }
 
         try {
-            $vendor = Vendor::findOrFail($id);
-            $vendor->status = $request->status;
+            $vendor = Vendor::with('user')->findOrFail($id);
+            $vendor->is_active = $request->boolean('is_active');
             $vendor->save();
+
+            // Also update the user's is_active status
+            if ($vendor->user) {
+                $vendor->user->is_active = $request->boolean('is_active');
+                $vendor->user->save();
+            }
+
+            $statusText = $request->boolean('is_active') ? 'approved' : 'disapproved';
 
             return response()->json([
                 'success' => true,
-                'message' => 'Vendor status updated successfully',
+                'message' => "Vendor {$statusText} successfully",
                 'data' => $vendor,
             ]);
         } catch (\Exception $e) {
@@ -1024,6 +1036,526 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete category',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all partner wallets (Easygear, Resilience, Logistics)
+     */
+    public function getPartnerWallets(Request $request): JsonResponse
+    {
+        try {
+            $partners = ['easygear', 'resilience', 'logistics'];
+            $walletsData = [];
+
+            foreach ($partners as $partner) {
+                $wallet = Wallet::getOrCreate($partner, null);
+                
+                // Get recent transactions if requested
+                $transactions = null;
+                if ($request->boolean('include_transactions')) {
+                    $transactions = $wallet->transactions()
+                        ->with(['order', 'orderItem.product'])
+                        ->orderBy('created_at', 'desc')
+                        ->limit($request->get('transaction_limit', 50))
+                        ->get();
+                }
+
+                $walletsData[] = [
+                    'partner' => ucfirst($partner),
+                    'wallet' => $wallet,
+                    'transactions' => $transactions,
+                ];
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $walletsData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch partner wallets',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get specific partner wallet details with transactions
+     */
+    public function getPartnerWallet(string $partner, Request $request): JsonResponse
+    {
+        try {
+            $allowedPartners = ['easygear', 'resilience', 'logistics'];
+            
+            if (!in_array(strtolower($partner), $allowedPartners)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid partner name. Allowed: ' . implode(', ', $allowedPartners),
+                ], 400);
+            }
+
+            $wallet = Wallet::getOrCreate(strtolower($partner), null);
+            
+            $query = $wallet->transactions()
+                ->with(['order.user', 'orderItem.product', 'orderItem.vendor']);
+
+            // Filter by date range
+            if ($request->has('start_date')) {
+                $query->whereDate('created_at', '>=', $request->start_date);
+            }
+            if ($request->has('end_date')) {
+                $query->whereDate('created_at', '<=', $request->end_date);
+            }
+
+            // Filter by type
+            if ($request->has('type')) {
+                $query->where('type', $request->type);
+            }
+
+            $transactions = $query->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 20));
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'partner' => ucfirst($partner),
+                    'wallet' => $wallet,
+                    'transactions' => $transactions,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch partner wallet',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all vendor wallets summary
+     */
+    public function getVendorWallets(Request $request): JsonResponse
+    {
+        try {
+            $query = Wallet::where('owner_type', 'vendor')
+                ->with('owner'); // This will load the vendor relationship
+
+            // Search by vendor name
+            if ($request->has('search')) {
+                $query->whereHas('owner', function ($q) use ($request) {
+                    $q->where('name', 'like', '%' . $request->search . '%');
+                });
+            }
+
+            $wallets = $query->orderBy('balance', 'desc')
+                ->paginate($request->get('per_page', 20));
+
+            return response()->json([
+                'success' => true,
+                'data' => $wallets,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch vendor wallets',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all logistics companies with wallet info
+     */
+    public function getLogisticsCompanies(Request $request): JsonResponse
+    {
+        try {
+            $companies = LogisticsCompany::orderBy('name')->get();
+
+            $companiesWithWallets = $companies->map(function ($company) {
+                $wallet = $company->getOrCreateWallet();
+                return [
+                    'company' => $company,
+                    'wallet' => $wallet,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $companiesWithWallets,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch logistics companies',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create logistics company payout/withdrawal
+     */
+    public function createLogisticsPayout(Request $request, $companyId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'amount' => 'required|numeric|min:0.01',
+            'notes' => 'sometimes|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $company = LogisticsCompany::findOrFail($companyId);
+
+            // Validate bank details exist
+            if (!$company->account_number || !$company->bank_name) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Logistics company bank details not configured',
+                ], 400);
+            }
+
+            $wallet = $company->getOrCreateWallet();
+
+            // Check sufficient balance
+            if ($wallet->balance < $request->amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient wallet balance',
+                    'data' => [
+                        'available_balance' => $wallet->balance,
+                        'requested_amount' => $request->amount,
+                    ],
+                ], 400);
+            }
+
+            $paystackService = new PaystackService();
+
+            DB::transaction(function () use ($wallet, $company, $request, $paystackService, &$withdrawal) {
+                $reference = 'WD-LOG-' . $company->id . '-' . Str::random(12);
+
+                // Create or get Paystack recipient
+                if (!$company->paystack_recipient_code) {
+                    // Need to get bank code from bank name
+                    // For now, we'll need to add bank_code to logistics_companies or resolve it
+                    // Let's skip automatic recipient creation for now and handle it manually
+                    $recipientCode = null;
+                } else {
+                    $recipientCode = $company->paystack_recipient_code;
+                }
+
+                // Debit the wallet first
+                $wallet->debit(
+                    $request->amount,
+                    $reference,
+                    "Withdrawal to {$company->bank_name} - {$company->account_number}",
+                    [
+                        'logistics_company_id' => $company->id,
+                        'bank_name' => $company->bank_name,
+                        'account_number' => $company->account_number,
+                        'account_name' => $company->account_name,
+                    ]
+                );
+
+                // Create withdrawal record
+                $withdrawal = WalletWithdrawal::create([
+                    'wallet_id' => $wallet->id,
+                    'recipient_type' => 'logistics_company',
+                    'recipient_id' => $company->id,
+                    'amount' => $request->amount,
+                    'bank_name' => $company->bank_name,
+                    'account_number' => $company->account_number,
+                    'account_name' => $company->account_name,
+                    'reference' => $reference,
+                    'status' => 'pending',
+                    'notes' => $request->notes,
+                    'metadata' => [
+                        'initiated_by' => auth()->user()->id,
+                        'initiated_by_name' => auth()->user()->name,
+                    ],
+                ]);
+
+                // If recipient code exists, initiate Paystack transfer
+                if ($recipientCode) {
+                    $transferResult = $paystackService->initiateTransfer(
+                        'balance',
+                        $request->amount,
+                        $recipientCode,
+                        $request->notes ?? "Payout to {$company->name}",
+                        $reference
+                    );
+
+                    if ($transferResult['success']) {
+                        $withdrawal->update([
+                            'paystack_transfer_code' => $transferResult['transfer_code'],
+                            'paystack_transfer_id' => $transferResult['id'],
+                            'status' => 'processing',
+                            'metadata' => array_merge($withdrawal->metadata ?? [], [
+                                'paystack_response' => $transferResult['data'],
+                                'auto_transfer' => true,
+                            ]),
+                        ]);
+                    } else {
+                        // Transfer failed, add error to metadata but keep as pending for manual processing
+                        $withdrawal->update([
+                            'metadata' => array_merge($withdrawal->metadata ?? [], [
+                                'paystack_error' => $transferResult['message'],
+                                'auto_transfer_failed' => true,
+                            ]),
+                        ]);
+                    }
+                }
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payout initiated successfully',
+                'data' => [
+                    'withdrawal' => $withdrawal->fresh(),
+                    'wallet_balance' => $wallet->fresh()->balance,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create payout',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all withdrawals/payouts
+     */
+    public function getWithdrawals(Request $request): JsonResponse
+    {
+        try {
+            $query = WalletWithdrawal::with('wallet');
+
+            // Filter by status
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            // Filter by recipient type
+            if ($request->has('recipient_type')) {
+                $query->where('recipient_type', $request->recipient_type);
+            }
+
+            // Date range
+            if ($request->has('start_date')) {
+                $query->whereDate('created_at', '>=', $request->start_date);
+            }
+            if ($request->has('end_date')) {
+                $query->whereDate('created_at', '<=', $request->end_date);
+            }
+
+            $withdrawals = $query->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 20));
+
+            // Load recipients
+            $withdrawals->getCollection()->transform(function ($withdrawal) {
+                $withdrawal->recipient_details = $withdrawal->recipient();
+                return $withdrawal;
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $withdrawals,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch withdrawals',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update withdrawal status (mark as completed/failed)
+     */
+    public function updateWithdrawalStatus(Request $request, $withdrawalId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|in:processing,completed,failed',
+            'notes' => 'sometimes|string|max:500',
+            'metadata' => 'sometimes|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $withdrawal = WalletWithdrawal::findOrFail($withdrawalId);
+
+            if (in_array($withdrawal->status, ['completed', 'failed'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Withdrawal already processed',
+                ], 400);
+            }
+
+            $updateData = [
+                'status' => $request->status,
+            ];
+
+            if ($request->has('notes')) {
+                $updateData['notes'] = $request->notes;
+            }
+
+            if ($request->has('metadata')) {
+                $updateData['metadata'] = array_merge(
+                    $withdrawal->metadata ?? [],
+                    $request->metadata
+                );
+            }
+
+            if (in_array($request->status, ['completed', 'failed'])) {
+                $updateData['processed_at'] = now();
+            }
+
+            // If failed, refund to wallet
+            if ($request->status === 'failed') {
+                DB::transaction(function () use ($withdrawal, $updateData) {
+                    $wallet = $withdrawal->wallet;
+                    $wallet->credit(
+                        $withdrawal->amount,
+                        $withdrawal->reference . '-REFUND',
+                        'Refund for failed withdrawal',
+                        [
+                            'original_withdrawal_id' => $withdrawal->id,
+                            'refund_reason' => 'withdrawal_failed',
+                        ]
+                    );
+
+                    $withdrawal->update($updateData);
+                });
+            } else {
+                $withdrawal->update($updateData);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Withdrawal status updated successfully',
+                'data' => $withdrawal->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update withdrawal status',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create or update Paystack transfer recipient for logistics company
+     */
+    public function createPaystackRecipient(Request $request, $companyId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'bank_code' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $company = LogisticsCompany::findOrFail($companyId);
+
+            if (!$company->account_number || !$company->account_name) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bank account details not configured',
+                ], 400);
+            }
+
+            $paystackService = new PaystackService();
+
+            // Create transfer recipient
+            $result = $paystackService->createTransferRecipient(
+                'nuban',
+                $company->account_name,
+                $company->account_number,
+                $request->bank_code,
+                'NGN'
+            );
+
+            if ($result['success']) {
+                $company->update([
+                    'bank_code' => $request->bank_code,
+                    'paystack_recipient_code' => $result['recipient_code'],
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Paystack recipient created successfully',
+                    'data' => [
+                        'company' => $company->fresh(),
+                        'recipient_code' => $result['recipient_code'],
+                    ],
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create Paystack recipient',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get list of Nigerian banks from Paystack
+     */
+    public function getPaystackBanks(): JsonResponse
+    {
+        try {
+            $paystackService = new PaystackService();
+            $result = $paystackService->listBanks('NG');
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $result['banks'],
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch banks',
                 'error' => $e->getMessage(),
             ], 500);
         }

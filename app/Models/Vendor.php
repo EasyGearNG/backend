@@ -48,4 +48,12 @@ class Vendor extends Model
     {
         return $this->hasMany(PaymentSplit::class);
     }
+
+    /**
+     * Get the vendor's wallet.
+     */
+    public function wallet()
+    {
+        return $this->morphOne(Wallet::class, 'owner');
+    }
 }

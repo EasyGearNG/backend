@@ -11,17 +11,27 @@ class OrderItem extends Model
         'order_id',
         'product_id',
         'vendor_id',
+        'logistics_company_id',
+        'logistics_fee',
         'quantity',
         'price_at_purchase',
         'subtotal',
         'tracking_id',
         'shipment_id',
+        'fulfillment_status',
+        'dispatched_at',
+        'delivered_at',
+        'confirmed_at',
+        'dispatch_notes',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
         'price_at_purchase' => 'decimal:2',
         'subtotal' => 'decimal:2',
+        'dispatched_at' => 'datetime',
+        'delivered_at' => 'datetime',
+        'confirmed_at' => 'datetime',
     ];
 
     /**
@@ -46,6 +56,14 @@ class OrderItem extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Get the logistics company handling this order item.
+     */
+    public function logisticsCompany(): BelongsTo
+    {
+        return $this->belongsTo(LogisticsCompany::class);
     }
 
     /**

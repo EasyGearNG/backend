@@ -59,7 +59,7 @@ class AuthController extends Controller
                 'contact_phone' => $request->business_phone,
                 'address' => $request->business_address,
                 'commission_rate' => 15.00, // Default commission rate
-                'is_active' => true,
+                'is_active' => false, // Pending admin approval
             ]);
         }
 
