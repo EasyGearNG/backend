@@ -23,6 +23,11 @@ class OrderItem extends Model
         'delivered_at',
         'confirmed_at',
         'dispatch_notes',
+        'office_location',
+        'inspection_notes',
+        'tag_number',
+        'tracking_number',
+        'received_at_office_at',
     ];
 
     protected $casts = [
@@ -32,6 +37,7 @@ class OrderItem extends Model
         'dispatched_at' => 'datetime',
         'delivered_at' => 'datetime',
         'confirmed_at' => 'datetime',
+        'received_at_office_at' => 'datetime',
     ];
 
     /**

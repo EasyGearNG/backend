@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -244,7 +245,7 @@ class AdminController extends Controller
                     Mail::to($user->email)->send(new AdminInvitation($user, $plainPassword));
                 } catch (\Exception $e) {
                     // Log the error but don't fail the user creation
-                    \Log::warning('Failed to send admin invitation email: ' . $e->getMessage());
+                    Log::warning('Failed to send admin invitation email: ' . $e->getMessage());
                 }
             }
 
@@ -1556,6 +1557,359 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch banks',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new logistics company
+     */
+    public function createLogisticsCompany(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'code' => 'required|string|max:50|unique:logistics_companies,code',
+            'contact_email' => 'required|email|max:255',
+            'contact_phone' => 'required|string|max:20',
+            'address' => 'nullable|string|max:500',
+            'delivery_fee' => 'required|numeric|min:0',
+            'commission_percentage' => 'required|numeric|min:0|max:100',
+            'bank_name' => 'nullable|string|max:255',
+            'bank_code' => 'nullable|string|max:10',
+            'account_number' => 'nullable|string|max:20',
+            'account_name' => 'nullable|string|max:255',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $company = LogisticsCompany::create([
+                'name' => $request->name,
+                'code' => strtoupper($request->code),
+                'contact_email' => $request->contact_email,
+                'contact_phone' => $request->contact_phone,
+                'address' => $request->address,
+                'delivery_fee' => $request->delivery_fee,
+                'commission_percentage' => $request->commission_percentage,
+                'bank_name' => $request->bank_name,
+                'bank_code' => $request->bank_code,
+                'account_number' => $request->account_number,
+                'account_name' => $request->account_name,
+                'is_active' => $request->is_active ?? true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logistics company created successfully',
+                'data' => $company,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create logistics company',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update a logistics company
+     */
+    public function updateLogisticsCompany(Request $request, $id): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'sometimes|string|max:255',
+            'code' => 'sometimes|string|max:50|unique:logistics_companies,code,' . $id,
+            'contact_email' => 'sometimes|email|max:255',
+            'contact_phone' => 'sometimes|string|max:20',
+            'address' => 'nullable|string|max:500',
+            'delivery_fee' => 'sometimes|numeric|min:0',
+            'commission_percentage' => 'sometimes|numeric|min:0|max:100',
+            'bank_name' => 'nullable|string|max:255',
+            'bank_code' => 'nullable|string|max:10',
+            'account_number' => 'nullable|string|max:20',
+            'account_name' => 'nullable|string|max:255',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $company = LogisticsCompany::findOrFail($id);
+
+            $updateData = $request->only([
+                'name',
+                'contact_email',
+                'contact_phone',
+                'address',
+                'delivery_fee',
+                'commission_percentage',
+                'bank_name',
+                'bank_code',
+                'account_number',
+                'account_name',
+                'is_active',
+            ]);
+
+            if ($request->has('code')) {
+                $updateData['code'] = strtoupper($request->code);
+            }
+
+            $company->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logistics company updated successfully',
+                'data' => $company->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update logistics company',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a logistics company
+     */
+    public function deleteLogisticsCompany($id): JsonResponse
+    {
+        try {
+            $company = LogisticsCompany::findOrFail($id);
+
+            // Check if company has any order items
+            if ($company->orderItems()->count() > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete logistics company with existing orders',
+                ], 400);
+            }
+
+            $company->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logistics company deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete logistics company',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all order items waiting for vendor delivery to office
+     */
+    public function getOrdersAwaitingVendorDelivery(Request $request): JsonResponse
+    {
+        try {
+            $query = \App\Models\OrderItem::with(['order.user', 'product', 'product.vendor'])
+                ->where('fulfillment_status', 'pending')
+                ->whereHas('order.payment', function($q) {
+                    $q->where('status', 'success');
+                });
+
+            // Filter by vendor if specified
+            if ($request->has('vendor_id')) {
+                $query->where('vendor_id', $request->vendor_id);
+            }
+
+            $items = $query->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 20));
+
+            return response()->json([
+                'success' => true,
+                'data' => $items,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch orders',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Confirm vendor has delivered item to EasyGear office
+     */
+    public function confirmVendorDeliveryToOffice(Request $request, $itemId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'office_location' => 'required|string|max:255',
+            'inspection_notes' => 'nullable|string|max:1000',
+            'tag_number' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $orderItem = \App\Models\OrderItem::with(['order.payment', 'product'])
+                ->findOrFail($itemId);
+
+            if ($orderItem->fulfillment_status !== 'pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order item not in pending status',
+                ], 400);
+            }
+
+            // Ensure payment is successful
+            if ($orderItem->order->payment->status !== 'success') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment not confirmed',
+                ], 400);
+            }
+
+            $orderItem->update([
+                'fulfillment_status' => 'received_at_office',
+                'received_at_office_at' => now(),
+                'office_location' => $request->office_location,
+                'inspection_notes' => $request->inspection_notes,
+                'tag_number' => $request->tag_number,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Item delivery confirmed - received at office',
+                'data' => $orderItem->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to confirm delivery',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all order items at office ready for dispatch
+     */
+    public function getOrdersReadyForDispatch(Request $request): JsonResponse
+    {
+        try {
+            $query = \App\Models\OrderItem::with(['order.user', 'order.userAddress', 'product', 'product.vendor'])
+                ->where('fulfillment_status', 'received_at_office');
+
+            // Filter by office location if specified
+            if ($request->has('office_location')) {
+                $query->where('office_location', $request->office_location);
+            }
+
+            $items = $query->orderBy('received_at_office_at', 'asc')
+                ->paginate($request->get('per_page', 20));
+
+            return response()->json([
+                'success' => true,
+                'data' => $items,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch orders',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Dispatch order item from EasyGear office to customer
+     */
+    public function dispatchFromOffice(Request $request, $itemId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'logistics_company_id' => 'required|exists:logistics_companies,id',
+            'dispatch_notes' => 'nullable|string|max:500',
+            'tracking_number' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $orderItem = \App\Models\OrderItem::with(['order.payment', 'product'])
+                ->findOrFail($itemId);
+
+            if ($orderItem->fulfillment_status !== 'received_at_office') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order item not received at office yet',
+                ], 400);
+            }
+
+            // Get logistics company and calculate fee
+            $logisticsCompany = LogisticsCompany::findOrFail($request->logistics_company_id);
+            
+            if (!$logisticsCompany->is_active) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Selected logistics company is not active',
+                ], 400);
+            }
+
+            // Calculate logistics fee
+            $logisticsFee = $logisticsCompany->delivery_fee;
+            $commissionAmount = ($orderItem->subtotal * $logisticsCompany->commission_percentage) / 100;
+            $totalLogisticsFee = $logisticsFee + $commissionAmount;
+
+            // Add to logistics company's pending wallet balance
+            $logisticsWallet = $logisticsCompany->getOrCreateWallet();
+            $logisticsWallet->increment('pending_balance', $totalLogisticsFee);
+
+            $orderItem->update([
+                'fulfillment_status' => 'dispatched',
+                'dispatched_at' => now(),
+                'logistics_company_id' => $request->logistics_company_id,
+                'logistics_fee' => $totalLogisticsFee,
+                'dispatch_notes' => $request->dispatch_notes,
+                'tracking_number' => $request->tracking_number,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order dispatched successfully',
+                'data' => [
+                    'order_item' => $orderItem->fresh(),
+                    'logistics_company' => $logisticsCompany,
+                    'logistics_fee' => $totalLogisticsFee,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to dispatch order',
                 'error' => $e->getMessage(),
             ], 500);
         }

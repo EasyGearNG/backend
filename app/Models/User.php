@@ -85,6 +85,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the user's wishlist items.
+     */
+    public function wishlists()
+    {
+        return $this->hasMany(Wishlist::class);
+    }
+
+    /**
      * Get the vendor profile for this user (if user is a vendor)
      */
     public function vendor()
