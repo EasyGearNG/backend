@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\WaitlistController;
+use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\PaystackWebhookController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\VendorProductController;
@@ -98,6 +99,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders/{id}', [AdminController::class, 'showOrder']);
         Route::patch('/orders/{id}/status', [AdminController::class, 'updateOrderStatus']);
         
+        // Order Fulfillment (Office Workflow)
+        Route::get('/orders/items/awaiting-delivery', [AdminController::class, 'getOrdersAwaitingVendorDelivery']); // Items waiting for vendor to bring to office
+        Route::post('/orders/items/{itemId}/confirm-vendor-delivery', [AdminController::class, 'confirmVendorDeliveryToOffice']); // Confirm vendor delivered to office
+        Route::get('/orders/items/ready-for-dispatch', [AdminController::class, 'getOrdersReadyForDispatch']); // Items at office ready to dispatch
+        Route::post('/orders/items/{itemId}/dispatch-from-office', [AdminController::class, 'dispatchFromOffice']); // Dispatch from office to customer
+        
         // Product Management
         Route::get('/products', [AdminController::class, 'products']);
         Route::get('/products/{id}', [AdminController::class, 'showProduct']);
@@ -129,6 +136,9 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         
         // Logistics Company Management
         Route::get('/logistics-companies', [AdminController::class, 'getLogisticsCompanies']); // Get all logistics companies with wallets
+        Route::post('/logistics-companies', [AdminController::class, 'createLogisticsCompany']); // Create new logistics company
+        Route::put('/logistics-companies/{id}', [AdminController::class, 'updateLogisticsCompany']); // Update logistics company
+        Route::delete('/logistics-companies/{id}', [AdminController::class, 'deleteLogisticsCompany']); // Delete logistics company
         Route::post('/logistics-companies/{id}/payout', [AdminController::class, 'createLogisticsPayout']); // Create payout/withdrawal from logistics company wallet
         
         // Withdrawal Management
@@ -157,6 +167,16 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::put('/items/{itemId}', [CartController::class, 'updateItem']); // Update cart item quantity
         Route::delete('/items/{itemId}', [CartController::class, 'removeItem']); // Remove item from cart
         Route::delete('/clear', [CartController::class, 'clear']); // Clear all cart items
+    });
+    
+    // Wishlist routes (authenticated users)
+    Route::prefix('wishlist')->group(function () {
+        Route::get('/', [WishlistController::class, 'index']); // Get user's wishlist
+        Route::post('/add', [WishlistController::class, 'store']); // Add product to wishlist
+        Route::post('/toggle', [WishlistController::class, 'toggle']); // Toggle product in wishlist
+        Route::delete('/{productId}', [WishlistController::class, 'destroy']); // Remove product from wishlist
+        Route::get('/check/{productId}', [WishlistController::class, 'check']); // Check if product is in wishlist
+        Route::delete('/', [WishlistController::class, 'clear']); // Clear all wishlist items
     });
     
     // Address routes (authenticated users)
@@ -196,10 +216,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Vendor Fulfillment & Wallet Routes (vendors only)
     Route::prefix('vendor')->middleware('vendor')->group(function () {
-        Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders to dispatch
-        Route::post('/orders/{itemId}/dispatch', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'dispatchItem']); // Mark item as dispatched
+        Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders (vendor needs to deliver to office)
         Route::get('/wallet', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWallet']); // Get wallet balance and transactions
-        Route::get('/logistics-companies', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getLogisticsCompanies']); // Get available logistics companies
     });
 
     // Customer Order Confirmation
