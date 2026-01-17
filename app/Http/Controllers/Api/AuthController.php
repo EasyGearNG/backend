@@ -184,6 +184,15 @@ class AuthController extends Controller
             'username' => 'sometimes|string|max:255|unique:users,username,' . $user->id,
             'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->id,
             'phone_number' => 'nullable|string|max:15',
+            
+            // Address fields (all optional)
+            'address_line1' => 'nullable|string|max:255',
+            'address_line2' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:100',
+            'state' => 'nullable|string|max:100',
+            'postal_code' => 'nullable|string|max:20',
+            'country' => 'nullable|string|max:100',
+            'address_type' => 'nullable|in:shipping,billing',
         ]);
 
         if ($validator->fails()) {
@@ -194,13 +203,41 @@ class AuthController extends Controller
             ], 422);
         }
 
+        // Update user basic info
         $user->update($request->only(['name', 'username', 'email', 'phone_number']));
+
+        // Update or create address if address fields are provided
+        if ($request->has('address_line1')) {
+            $addressData = $request->only([
+                'address_line1',
+                'address_line2',
+                'city',
+                'state',
+                'postal_code',
+                'country',
+                'address_type'
+            ]);
+
+            // Get user's default address or create new one
+            $address = $user->addresses()->where('is_default', true)->first();
+            
+            if ($address) {
+                // Update existing default address
+                $address->update($addressData);
+            } else {
+                // Create new default address
+                $addressData['user_id'] = $user->id;
+                $addressData['is_default'] = true;
+                $addressData['address_type'] = $addressData['address_type'] ?? 'shipping';
+                $user->addresses()->create($addressData);
+            }
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Profile updated successfully',
             'data' => [
-                'user' => $user->fresh()
+                'user' => $user->fresh()->load('addresses')
             ]
         ], 200);
     }
