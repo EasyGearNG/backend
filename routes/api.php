@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthStatusController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
+use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\WaitlistController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\PaystackWebhookController;
@@ -40,6 +41,9 @@ Route::prefix('v1')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available
     Route::get('/auth/check', [AuthStatusController::class, 'check']);
+    
+    // Contact form route
+    Route::post('/contact', [ContactController::class, 'submit']);
     
     // Waitlist routes
     Route::post('/waitlist/join', [WaitlistController::class, 'join']);
