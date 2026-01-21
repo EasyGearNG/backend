@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Auth\Notifications\ResetPassword as ResetPasswordNotification;
 
 class User extends Authenticatable
 {
@@ -98,5 +99,15 @@ class User extends Authenticatable
     public function vendor()
     {
         return $this->hasOne(Vendor::class);
+    }
+
+    /**
+     * Send the password reset notification with custom URL
+     */
+    public function sendPasswordResetNotification($token)
+    {
+        $url = config('frontend.url', config('app.url')) . '/reset-password?token=' . $token . '&email=' . urlencode($this->email);
+        
+        $this->notify(new ResetPasswordNotification($token));
     }
 }
