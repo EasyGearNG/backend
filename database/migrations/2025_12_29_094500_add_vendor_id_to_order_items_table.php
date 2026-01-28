@@ -12,8 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('order_items', function (Blueprint $table) {
-            // Only add the foreign key if the column exists
-            if (Schema::hasColumn('order_items', 'vendor_id')) {
+            // Add vendor_id column if it doesn't exist
+            if (!Schema::hasColumn('order_items', 'vendor_id')) {
+                $table->unsignedBigInteger('vendor_id')->nullable()->after('product_id');
                 $table->foreign('vendor_id')->references('id')->on('vendors')->onDelete('cascade');
             }
         });
