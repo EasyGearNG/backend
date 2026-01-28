@@ -397,8 +397,8 @@ class VendorProductController extends Controller
             ->get();
 
         foreach ($images as $image) {
-            if (Storage::exists($image->image_path)) {
-                Storage::delete($image->image_path);
+            if (Storage::disk('public')->exists($image->image_path)) {
+                Storage::disk('public')->delete($image->image_path);
             }
             $image->delete();
         }
