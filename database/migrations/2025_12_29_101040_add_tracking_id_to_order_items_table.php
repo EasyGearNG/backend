@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('order_items', function (Blueprint $table) {
             if (!Schema::hasColumn('order_items', 'tracking_id')) {
-                $table->string('tracking_id')->unique()->after('id');
+                $table->string('tracking_id')->nullable()->unique()->after('id');
             }
             if (!Schema::hasColumn('order_items', 'shipment_id')) {
                 $table->unsignedBigInteger('shipment_id')->nullable()->after('tracking_id');
