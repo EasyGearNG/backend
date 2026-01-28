@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\Payment;
@@ -19,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -494,6 +496,8 @@ class AdminController extends Controller
             'color_options' => 'sometimes|array',
             'is_featured' => 'sometimes|boolean',
             'status' => 'sometimes|in:active,inactive,draft',
+            'images' => 'nullable|array|max:5',
+            'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         if ($validator->fails()) {
@@ -505,7 +509,23 @@ class AdminController extends Controller
         }
 
         try {
-            $product = Product::create($request->all());
+            DB::beginTransaction();
+            
+            $productData = $request->except('images');
+            if (!$request->has('slug')) {
+                $productData['slug'] = Str::slug($request->name) . '-' . time();
+            }
+            
+            $product = Product::create($productData);
+
+            // Handle image uploads
+            if ($request->hasFile('images')) {
+                $this->uploadProductImages($product, $request->file('images'));
+            }
+            
+            DB::commit();
+            
+            $product->load(['category', 'images', 'vendor']);
 
             return response()->json([
                 'success' => true,
@@ -513,6 +533,7 @@ class AdminController extends Controller
                 'data' => $product,
             ], 201);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create product',
@@ -542,6 +563,10 @@ class AdminController extends Controller
             'color_options' => 'sometimes|array',
             'is_featured' => 'sometimes|boolean',
             'status' => 'sometimes|in:active,inactive,draft',
+            'images' => 'nullable|array|max:5',
+            'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
+            'remove_images' => 'nullable|array',
+            'remove_images.*' => 'exists:product_images,id',
         ]);
 
         if ($validator->fails()) {
@@ -553,6 +578,8 @@ class AdminController extends Controller
         }
 
         try {
+            DB::beginTransaction();
+            
             $product = Product::findOrFail($id);
             
             // If name is updated, regenerate slug
@@ -560,7 +587,19 @@ class AdminController extends Controller
                 $request->merge(['slug' => Str::slug($request->name) . '-' . time()]);
             }
             
-            $product->update($request->all());
+            $product->update($request->except(['images', 'remove_images']));
+
+            // Handle image removal
+            if ($request->filled('remove_images')) {
+                $this->removeProductImages($product, $request->remove_images);
+            }
+
+            // Handle new image uploads
+            if ($request->hasFile('images')) {
+                $this->uploadProductImages($product, $request->file('images'));
+            }
+            
+            DB::commit();
 
             return response()->json([
                 'success' => true,
@@ -568,6 +607,7 @@ class AdminController extends Controller
                 'data' => $product->fresh(['vendor', 'category', 'images']),
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update product',
@@ -1912,6 +1952,39 @@ class AdminController extends Controller
                 'message' => 'Failed to dispatch order',
                 'error' => $e->getMessage(),
             ], 500);
+        }
+    }
+
+    /**
+     * Upload product images
+     */
+    private function uploadProductImages(Product $product, array $images): void
+    {
+        foreach ($images as $image) {
+            $path = $image->store('products', 'public');
+            
+            ProductImage::create([
+                'product_id' => $product->id,
+                'image_path' => $path,
+                'alt_text' => $product->name
+            ]);
+        }
+    }
+
+    /**
+     * Remove product images
+     */
+    private function removeProductImages(Product $product, array $imageIds): void
+    {
+        $images = ProductImage::where('product_id', $product->id)
+            ->whereIn('id', $imageIds)
+            ->get();
+
+        foreach ($images as $image) {
+            if (Storage::disk('public')->exists($image->image_path)) {
+                Storage::disk('public')->delete($image->image_path);
+            }
+            $image->delete();
         }
     }
 }
