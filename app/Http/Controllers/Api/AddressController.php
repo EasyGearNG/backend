@@ -18,12 +18,22 @@ class AddressController extends Controller
     public function index(): JsonResponse
     {
         try {
-            $addresses = Auth::user()->addresses()->orderBy('is_default', 'desc')->get();
+            $user = Auth::user();
+            $addresses = $user->addresses()->orderBy('is_default', 'desc')->get();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Addresses retrieved successfully',
-                'data' => $addresses,
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'role' => $user->role,
+                    ],
+                    'addresses' => $addresses,
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
