@@ -17,6 +17,89 @@ use Illuminate\Support\Str;
 class VendorFulfillmentController extends Controller
 {
     /**
+     * Get all orders tied to the vendor (all statuses)
+     */
+    public function getAllOrders(Request $request): JsonResponse
+    {
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $query = OrderItem::with([
+                'order.user',
+                'order.payment',
+                'order.shippingAddress',
+                'product.images',
+                'logisticsCompany'
+            ])
+            ->where('vendor_id', $vendor->id)
+            ->orderBy('created_at', 'desc');
+
+            // Filter by fulfillment status if provided
+            if ($request->has('fulfillment_status')) {
+                $query->where('fulfillment_status', $request->fulfillment_status);
+            }
+
+            // Filter by order status if provided
+            if ($request->has('order_status')) {
+                $query->whereHas('order', function ($q) use ($request) {
+                    $q->where('status', $request->order_status);
+                });
+            }
+
+            // Filter by date range if provided
+            if ($request->has('from_date')) {
+                $query->whereDate('created_at', '>=', $request->from_date);
+            }
+            if ($request->has('to_date')) {
+                $query->whereDate('created_at', '<=', $request->to_date);
+            }
+
+            // Search by order ID or product name
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('order_id', 'like', "%{$search}%")
+                      ->orWhereHas('product', function ($pq) use ($search) {
+                          $pq->where('name', 'like', "%{$search}%");
+                      });
+                });
+            }
+
+            $orders = $query->paginate($request->get('per_page', 15));
+
+            // Add summary statistics
+            $stats = [
+                'total_orders' => OrderItem::where('vendor_id', $vendor->id)->count(),
+                'pending' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'pending')->count(),
+                'dispatched' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'dispatched')->count(),
+                'confirmed' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'confirmed')->count(),
+                'total_revenue' => OrderItem::where('vendor_id', $vendor->id)
+                    ->where('fulfillment_status', 'confirmed')
+                    ->sum('subtotal'),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $orders,
+                'stats' => $stats,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch orders',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get vendor's pending orders (items to dispatch)
      */
     public function pendingOrders(Request $request): JsonResponse
