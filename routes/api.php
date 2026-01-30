@@ -195,6 +195,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::patch('/{id}/default', [AddressController::class, 'setDefault']); // Set as default address
     });
     
+    // Customer Order routes (authenticated users)
+    Route::prefix('orders')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\OrderController::class, 'index']); // Get all orders for logged-in user
+        Route::get('/{id}', [\App\Http\Controllers\Api\OrderController::class, 'show']); // Get specific order details
+    });
+    
     // Checkout routes (authenticated users)
     Route::prefix('checkout')->group(function () {
         Route::get('/summary', [CheckoutController::class, 'getCheckoutSummary']); // Get checkout summary
@@ -222,6 +228,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     // Vendor Fulfillment & Wallet Routes (vendors only)
     Route::prefix('vendor')->middleware('vendor')->group(function () {
+        Route::get('/orders', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getAllOrders']); // Get all orders tied to vendor
         Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders (vendor needs to deliver to office)
         Route::get('/wallet', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWallet']); // Get wallet balance and transactions
     });
