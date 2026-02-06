@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // Public routes
-Route::prefix('v1')->group(function () {
+Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     Route::get('/', function () {
         return response()->json([
             'success' => true,
@@ -36,11 +36,13 @@ Route::prefix('v1')->group(function () {
         ]);
     });
     
-    // Authentication routes
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    // Authentication routes (stricter rate limiting)
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('/register', [AuthController::class, 'register']);
+        Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+        Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+    });
     // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available
     Route::get('/auth/check', [AuthStatusController::class, 'check']);
     
