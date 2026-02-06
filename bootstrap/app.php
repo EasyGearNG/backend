@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Add cookie token middleware to API routes
         $middleware->api(prepend: [
             \App\Http\Middleware\CookieTokenMiddleware::class,
+            \App\Http\Middleware\SecurityHeaders::class,
         ]);
         
         // Register role middleware alias
