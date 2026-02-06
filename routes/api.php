@@ -166,6 +166,26 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         ]);
     });
     
+    // User auth status check route
+    Route::get('/user/auth', function (Request $request) {
+        $user = $request->user();
+        return response()->json([
+            'success' => true,
+            'authenticated' => true,
+            'data' => [
+                'id' => $user->id,
+                'username' => $user->username,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone_number' => $user->phone_number,
+                'role' => $user->role,
+                'is_active' => $user->is_active,
+                'email_verified_at' => $user->email_verified_at,
+                'created_at' => $user->created_at,
+            ]
+        ]);
+    });
+    
     // Cart routes (authenticated users)
     Route::prefix('cart')->group(function () {
         Route::get('/', [CartController::class, 'index']); // Get cart
