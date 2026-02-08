@@ -257,6 +257,12 @@ class AdminController extends Controller
                 'data' => $user,
             ], 201);
         } catch (\Exception $e) {
+            Log::error('Failed to create user', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->except('password'),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create user',
