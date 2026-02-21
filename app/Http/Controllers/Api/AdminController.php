@@ -831,7 +831,18 @@ class AdminController extends Controller
         }
 
         try {
+            DB::beginTransaction();
+
             $vendor = Vendor::with('user')->findOrFail($id);
+            
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor not found',
+                ], 404);
+            }
+
+            // Update vendor status
             $vendor->is_active = $request->boolean('is_active');
             $vendor->save();
 
@@ -841,14 +852,23 @@ class AdminController extends Controller
                 $vendor->user->save();
             }
 
+            DB::commit();
+
             $statusText = $request->boolean('is_active') ? 'approved' : 'disapproved';
+
+            // Reload the vendor to ensure we have the latest data
+            $vendor->refresh();
 
             return response()->json([
                 'success' => true,
                 'message' => "Vendor {$statusText} successfully",
-                'data' => $vendor,
+                'data' => [
+                    'vendor' => $vendor,
+                    'user_status' => $vendor->user ? $vendor->user->is_active : null,
+                ],
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update vendor status',
@@ -1956,6 +1976,101 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to dispatch order',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Assign order items to a logistics company (bulk assignment)
+     */
+    public function assignOrderItemsToLogistics(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'order_item_ids' => 'required|array|min:1',
+            'order_item_ids.*' => 'required|exists:order_items,id',
+            'logistics_company_id' => 'required|exists:logistics_companies,id',
+            'tracking_number' => 'nullable|string|max:100',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $logisticsCompany = LogisticsCompany::findOrFail($request->logistics_company_id);
+
+            if (!$logisticsCompany->is_active) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Selected logistics company is not active',
+                ], 400);
+            }
+
+            DB::beginTransaction();
+
+            $updatedItems = [];
+            $errors = [];
+
+            foreach ($request->order_item_ids as $itemId) {
+                $orderItem = \App\Models\OrderItem::with(['order.payment'])->find($itemId);
+
+                if (!$orderItem) {
+                    $errors[] = "Order item {$itemId} not found";
+                    continue;
+                }
+
+                // Check if already assigned to a logistics company
+                if ($orderItem->logistics_company_id) {
+                    $errors[] = "Order item {$itemId} already assigned to a logistics company";
+                    continue;
+                }
+
+                // Check if payment is successful
+                if ($orderItem->order->payment->status !== 'success') {
+                    $errors[] = "Order item {$itemId} - payment not confirmed";
+                    continue;
+                }
+
+                // Calculate logistics fee
+                $logisticsFee = $logisticsCompany->delivery_fee;
+                $commissionAmount = ($orderItem->subtotal * $logisticsCompany->commission_percentage) / 100;
+                $totalLogisticsFee = $logisticsFee + $commissionAmount;
+
+                // Add to logistics company's pending wallet balance
+                $logisticsWallet = $logisticsCompany->getOrCreateWallet();
+                $logisticsWallet->increment('pending_balance', $totalLogisticsFee);
+
+                // Update order item
+                $orderItem->update([
+                    'logistics_company_id' => $request->logistics_company_id,
+                    'logistics_fee' => $totalLogisticsFee,
+                    'tracking_number' => $request->tracking_number,
+                ]);
+
+                $updatedItems[] = $orderItem->fresh(['order', 'product', 'logisticsCompany']);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Order items assigned to logistics company successfully',
+                'data' => [
+                    'updated_items' => $updatedItems,
+                    'total_assigned' => count($updatedItems),
+                    'errors' => $errors,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign order items',
                 'error' => $e->getMessage(),
             ], 500);
         }

@@ -8,10 +8,13 @@ use App\Models\Wallet;
 use App\Models\WalletTransaction;
 use App\Models\Vendor;
 use App\Models\LogisticsCompany;
+use App\Models\VendorStaff;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class VendorFulfillmentController extends Controller
@@ -454,6 +457,197 @@ class VendorFulfillmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch logistics companies',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all staff members for the vendor
+     */
+    public function getStaff(Request $request): JsonResponse
+    {
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $staff = VendorStaff::with('user')
+                ->where('vendor_id', $vendor->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $staff,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch staff members',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Add a new staff member to the vendor
+     */
+    public function addStaff(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'username' => 'required|string|unique:users,username|max:255',
+            'password' => 'required|string|min:6',
+            'phone_number' => 'nullable|string|max:20',
+            'role' => 'nullable|string|max:50',
+            'position' => 'nullable|string|max:100',
+            'permissions' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            DB::beginTransaction();
+
+            // Create user account for staff
+            $user = User::create([
+                'name' => $request->name,
+                'username' => $request->username,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'phone_number' => $request->phone_number,
+                'role' => 'vendor', // Staff members are also vendors
+                'is_active' => true,
+            ]);
+
+            // Create staff record
+            $staff = VendorStaff::create([
+                'vendor_id' => $vendor->id,
+                'user_id' => $user->id,
+                'role' => $request->role ?? 'staff',
+                'position' => $request->position,
+                'permissions' => $request->permissions,
+                'is_active' => true,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff member added successfully',
+                'data' => $staff->load('user'),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to add staff member',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update staff member details
+     */
+    public function updateStaff(Request $request, $staffId): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'role' => 'nullable|string|max:50',
+            'position' => 'nullable|string|max:100',
+            'permissions' => 'nullable|string',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $staff = VendorStaff::where('vendor_id', $vendor->id)
+                ->where('id', $staffId)
+                ->firstOrFail();
+
+            $staff->update($request->only(['role', 'position', 'permissions', 'is_active']));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff member updated successfully',
+                'data' => $staff->load('user'),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update staff member',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Remove a staff member
+     */
+    public function removeStaff($staffId): JsonResponse
+    {
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $staff = VendorStaff::where('vendor_id', $vendor->id)
+                ->where('id', $staffId)
+                ->firstOrFail();
+
+            $staff->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Staff member removed successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to remove staff member',
                 'error' => $e->getMessage(),
             ], 500);
         }
