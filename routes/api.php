@@ -106,6 +106,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders', [AdminController::class, 'orders']);
         Route::get('/orders/{id}', [AdminController::class, 'showOrder']);
         Route::patch('/orders/{id}/status', [AdminController::class, 'updateOrderStatus']);
+        Route::post('/orders/assign-logistics', [AdminController::class, 'assignOrderItemsToLogistics']);
         
         // Order Fulfillment (Office Workflow)
         Route::get('/orders/items/awaiting-delivery', [AdminController::class, 'getOrdersAwaitingVendorDelivery']); // Items waiting for vendor to bring to office
@@ -253,6 +254,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getAllOrders']); // Get all orders tied to vendor
         Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders (vendor needs to deliver to office)
         Route::get('/wallet', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWallet']); // Get wallet balance and transactions
+        
+        // Staff Management
+        Route::get('/staff', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getStaff']); // Get all staff members
+        Route::post('/staff', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'addStaff']); // Add new staff member
+        Route::put('/staff/{staffId}', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'updateStaff']); // Update staff member
+        Route::delete('/staff/{staffId}', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'removeStaff']); // Remove staff member
     });
 
     // Customer Order Confirmation

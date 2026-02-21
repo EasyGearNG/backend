@@ -50,6 +50,14 @@ class Vendor extends Model
     }
 
     /**
+     * Get the staff members for this vendor.
+     */
+    public function staff(): HasMany
+    {
+        return $this->hasMany(VendorStaff::class);
+    }
+
+    /**
      * Get the vendor's wallet.
      */
     public function wallet()
