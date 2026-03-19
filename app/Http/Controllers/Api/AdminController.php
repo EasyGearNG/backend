@@ -878,6 +878,43 @@ class AdminController extends Controller
     }
 
     /**
+     * Soft delete a vendor
+     */
+    public function deleteVendor($id): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+
+            $vendor = Vendor::with('user')->findOrFail($id);
+
+            // Deactivate both the vendor and their associated user account
+            $vendor->is_active = false;
+            $vendor->save();
+
+            if ($vendor->user) {
+                $vendor->user->is_active = false;
+                $vendor->user->save();
+            }
+
+            $vendor->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Vendor deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete vendor',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get revenue analytics
      */
     public function revenueAnalytics(Request $request): JsonResponse

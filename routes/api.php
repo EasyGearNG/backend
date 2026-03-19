@@ -128,6 +128,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/vendors', [AdminController::class, 'vendors']);
         Route::get('/vendors/{id}', [AdminController::class, 'showVendor']);
         Route::patch('/vendors/{id}/status', [AdminController::class, 'updateVendorStatus']);
+        Route::delete('/vendors/{id}', [AdminController::class, 'deleteVendor']);
         
         // Payment Management
         Route::get('/payments', [AdminController::class, 'payments']);
