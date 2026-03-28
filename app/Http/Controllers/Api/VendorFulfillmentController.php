@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\OrderItem;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Models\WalletWithdrawal;
 use App\Models\Vendor;
 use App\Models\LogisticsCompany;
 use App\Models\VendorStaff;
@@ -303,6 +304,201 @@ class VendorFulfillmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch wallet',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get vendor dashboard stats:
+     * - Available wallet balance (earnings not yet withdrawn)
+     * - Total confirmed order count
+     * - Total product views across all vendor products
+     */
+    public function getStats(): JsonResponse
+    {
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $wallet = Wallet::getOrCreate('vendor', $vendor->id);
+
+            $orderCount = OrderItem::where('vendor_id', $vendor->id)
+                ->distinct('order_id')
+                ->count('order_id');
+
+            $totalProductViews = (int) $vendor->products()->sum('view_count');
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'wallet' => [
+                        'available_balance' => $wallet->balance,
+                        'pending_balance' => $wallet->pending_balance,
+                    ],
+                    'orders_count' => $orderCount,
+                    'total_product_views' => $totalProductViews,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch stats',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Request a withdrawal of available wallet balance.
+     * Debits the wallet immediately and creates a pending WalletWithdrawal
+     * record for admin to process.
+     */
+    public function requestWithdrawal(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'amount'         => 'required|numeric|min:100',
+            'bank_name'      => 'nullable|string|max:255',
+            'account_number' => 'nullable|string|max:20',
+            'account_name'   => 'nullable|string|max:255',
+            'notes'          => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $wallet = Wallet::getOrCreate('vendor', $vendor->id);
+
+            if ($wallet->balance < $request->amount) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient wallet balance',
+                    'data' => [
+                        'available_balance' => $wallet->balance,
+                        'requested_amount'  => $request->amount,
+                    ],
+                ], 400);
+            }
+
+            // Prefer request-supplied bank details, fall back to vendor profile
+            $bankDetails    = $vendor->bank_details ?? [];
+            $bankName       = $request->bank_name       ?? $bankDetails['bank_name']       ?? null;
+            $accountNumber  = $request->account_number  ?? $bankDetails['account_number']  ?? null;
+            $accountName    = $request->account_name    ?? $bankDetails['account_name']    ?? null;
+
+            if (!$bankName || !$accountNumber || !$accountName) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bank details are required. Provide bank_name, account_number, and account_name in the request, or save them on your vendor profile.',
+                ], 422);
+            }
+
+            $withdrawal = DB::transaction(function () use ($wallet, $vendor, $request, $bankName, $accountNumber, $accountName) {
+                $reference = 'WD-VND-' . $vendor->id . '-' . Str::random(12);
+
+                $wallet->debit(
+                    $request->amount,
+                    $reference,
+                    "Withdrawal to {$bankName} - {$accountNumber}",
+                    [
+                        'vendor_id'      => $vendor->id,
+                        'bank_name'      => $bankName,
+                        'account_number' => $accountNumber,
+                        'account_name'   => $accountName,
+                    ]
+                );
+
+                return WalletWithdrawal::create([
+                    'wallet_id'      => $wallet->id,
+                    'recipient_type' => 'vendor',
+                    'recipient_id'   => $vendor->id,
+                    'amount'         => $request->amount,
+                    'bank_name'      => $bankName,
+                    'account_number' => $accountNumber,
+                    'account_name'   => $accountName,
+                    'reference'      => $reference,
+                    'status'         => 'pending',
+                    'notes'          => $request->notes,
+                    'metadata'       => [
+                        'initiated_by'      => auth()->id(),
+                        'initiated_by_name' => auth()->user()->name,
+                        'vendor_id'         => $vendor->id,
+                    ],
+                ]);
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Withdrawal request submitted successfully. It will be processed within 1–3 business days.',
+                'data' => [
+                    'withdrawal'       => $withdrawal->fresh(),
+                    'wallet_balance'   => $wallet->fresh()->balance,
+                ],
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to submit withdrawal request',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * List withdrawal history for the authenticated vendor.
+     */
+    public function getWithdrawals(Request $request): JsonResponse
+    {
+        try {
+            $vendor = auth()->user()->vendor;
+
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $wallet = Wallet::getOrCreate('vendor', $vendor->id);
+
+            $query = WalletWithdrawal::where('wallet_id', $wallet->id)
+                ->orderBy('created_at', 'desc');
+
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            $withdrawals = $query->paginate($request->get('per_page', 15));
+
+            return response()->json([
+                'success' => true,
+                'data' => $withdrawals,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch withdrawals',
                 'error' => $e->getMessage(),
             ], 500);
         }

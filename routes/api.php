@@ -255,6 +255,9 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getAllOrders']); // Get all orders tied to vendor
         Route::get('/orders/pending', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'pendingOrders']); // Get pending orders (vendor needs to deliver to office)
         Route::get('/wallet', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWallet']); // Get wallet balance and transactions
+        Route::get('/wallet/withdrawals', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getWithdrawals']); // Get withdrawal history
+        Route::post('/wallet/withdraw', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'requestWithdrawal']); // Request a withdrawal
+        Route::get('/stats', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getStats']); // Dashboard stats: wallet balance, order count, product views
         
         // Staff Management
         Route::get('/staff', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getStaff']); // Get all staff members
