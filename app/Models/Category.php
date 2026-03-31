@@ -24,11 +24,19 @@ class Category extends Model
     }
 
     /**
-     * Get the child categories.
+     * Get direct child categories.
      */
     public function children(): HasMany
     {
         return $this->hasMany(Category::class, 'parent_id');
+    }
+
+    /**
+     * Get children recursively (for tree building).
+     */
+    public function childrenRecursive(): HasMany
+    {
+        return $this->children()->with('childrenRecursive')->withCount('products');
     }
 
     /**

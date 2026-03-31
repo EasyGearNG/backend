@@ -1007,15 +1007,25 @@ class AdminController extends Controller
     }
 
     /**
-     * Get categories
+     * Get categories (flat, paginated).
+     * Supports ?parent_id=N to list subcategories of a given parent,
+     * ?parent_id=null (or ?root_only=true) to list only root categories,
+     * and ?search=term for name search.
      */
     public function categories(Request $request): JsonResponse
     {
         try {
-            $query = Category::withCount('products');
+            $query = Category::with('parent')->withCount(['products', 'children']);
 
             if ($request->has('search')) {
                 $query->where('name', 'like', '%' . $request->search . '%');
+            }
+
+            if ($request->has('parent_id')) {
+                $parentId = $request->parent_id;
+                $query->where('parent_id', $parentId === 'null' ? null : $parentId);
+            } elseif ($request->boolean('root_only')) {
+                $query->whereNull('parent_id');
             }
 
             $categories = $query->orderBy('name')
@@ -1035,13 +1045,62 @@ class AdminController extends Controller
     }
 
     /**
+     * Get all categories as a nested tree.
+     * Each root category contains its subcategories recursively.
+     */
+    public function categoriesTree(): JsonResponse
+    {
+        try {
+            $tree = Category::with('childrenRecursive')
+                ->withCount('products')
+                ->whereNull('parent_id')
+                ->orderBy('name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $tree,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch category tree',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get single category with parent, children, and product count
+     */
+    public function showCategory($id): JsonResponse
+    {
+        try {
+            $category = Category::with(['parent', 'children'])
+                ->withCount('products')
+                ->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $category,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Category not found',
+            ], 404);
+        }
+    }
+
+    /**
      * Create category
      */
     public function createCategory(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:categories',
-            'description' => 'sometimes|string|max:500',
+            'name'        => 'required|string|max:255|unique:categories',
+            'description' => 'nullable|string|max:500',
+            'parent_id'   => 'nullable|exists:categories,id',
         ]);
 
         if ($validator->fails()) {
@@ -1053,15 +1112,15 @@ class AdminController extends Controller
         }
 
         try {
-            $data = $request->only(['name', 'description']);
+            $data = $request->only(['name', 'description', 'parent_id']);
             $data['slug'] = Str::slug($request->name) . '-' . Str::random(8);
-            
+
             $category = Category::create($data);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Category created successfully',
-                'data' => $category,
+                'data' => $category->load('parent'),
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -1078,8 +1137,9 @@ class AdminController extends Controller
     public function updateCategory(Request $request, $id): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255|unique:categories,name,' . $id,
-            'description' => 'sometimes|string|max:500',
+            'name'        => 'sometimes|string|max:255|unique:categories,name,' . $id,
+            'description' => 'nullable|string|max:500',
+            'parent_id'   => 'nullable|exists:categories,id',
         ]);
 
         if ($validator->fails()) {
@@ -1092,18 +1152,42 @@ class AdminController extends Controller
 
         try {
             $category = Category::findOrFail($id);
-            
-            $data = $request->only(['name', 'description']);
+
+            // Prevent assigning the category as its own parent or a descendant as its parent
+            if ($request->filled('parent_id')) {
+                if ((int) $request->parent_id === (int) $id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A category cannot be its own parent.',
+                    ], 422);
+                }
+
+                $descendantIds = $this->getDescendantIds($category);
+                if (in_array((int) $request->parent_id, $descendantIds)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot assign a child category as the parent (circular reference).',
+                    ], 422);
+                }
+            }
+
+            $data = $request->only(['name', 'description', 'parent_id']);
+
+            // Allow explicitly clearing the parent by sending parent_id: null
+            if ($request->exists('parent_id') && is_null($request->parent_id)) {
+                $data['parent_id'] = null;
+            }
+
             if ($request->has('name')) {
                 $data['slug'] = Str::slug($request->name) . '-' . Str::random(8);
             }
-            
+
             $category->update($data);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Category updated successfully',
-                'data' => $category,
+                'data' => $category->fresh(['parent', 'children'])->loadCount('products'),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1115,18 +1199,39 @@ class AdminController extends Controller
     }
 
     /**
+     * Recursively collect all descendant IDs of a category.
+     */
+    private function getDescendantIds(Category $category): array
+    {
+        $ids = [];
+        foreach ($category->children as $child) {
+            $ids[] = $child->id;
+            $ids = array_merge($ids, $this->getDescendantIds($child));
+        }
+        return $ids;
+    }
+
+    /**
      * Delete category
      */
     public function deleteCategory($id): JsonResponse
     {
         try {
-            $category = Category::findOrFail($id);
-            
-            // Check if category has products
-            if ($category->products()->count() > 0) {
+            $category = Category::withCount(['products', 'children'])->findOrFail($id);
+
+            if ($category->children_count > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete category with existing products',
+                    'message' => 'Cannot delete a category that has subcategories. Reassign or delete the subcategories first.',
+                    'data' => ['children_count' => $category->children_count],
+                ], 400);
+            }
+
+            if ($category->products_count > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete a category that has products. Reassign or remove the products first.',
+                    'data' => ['products_count' => $category->products_count],
                 ], 400);
             }
 

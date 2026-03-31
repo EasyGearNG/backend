@@ -66,8 +66,9 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     
     // Public Category routes
     Route::prefix('categories')->group(function () {
-        Route::get('/', [CategoryController::class, 'index']); // List all categories
-        Route::get('/{id}', [CategoryController::class, 'show']); // Get single category
+        Route::get('/', [CategoryController::class, 'index']); // Flat list (supports ?parent_id=, ?search=)
+        Route::get('/tree', [CategoryController::class, 'tree']); // Full nested tree
+        Route::get('/{id}', [CategoryController::class, 'show']); // Single category with parent + subcategories
     });
     
     // Paystack Webhooks (public, no authentication)
@@ -134,8 +135,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/payments', [AdminController::class, 'payments']);
         
         // Category Management
-        Route::get('/categories', [AdminController::class, 'categories']);
+        Route::get('/categories', [AdminController::class, 'categories']);           // Flat list (supports ?parent_id=, ?root_only=, ?search=)
         Route::post('/categories', [AdminController::class, 'createCategory']);
+        Route::get('/categories/tree', [AdminController::class, 'categoriesTree']); // Full nested tree
+        Route::get('/categories/{id}', [AdminController::class, 'showCategory']);
         Route::put('/categories/{id}', [AdminController::class, 'updateCategory']);
         Route::delete('/categories/{id}', [AdminController::class, 'deleteCategory']);
         
