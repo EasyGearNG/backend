@@ -140,6 +140,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/categories/tree', [AdminController::class, 'categoriesTree']); // Full nested tree
         Route::get('/categories/{id}', [AdminController::class, 'showCategory']);
         Route::put('/categories/{id}', [AdminController::class, 'updateCategory']);
+        Route::patch('/categories/{id}', [AdminController::class, 'updateCategory']);
         Route::delete('/categories/{id}', [AdminController::class, 'deleteCategory']);
         
         // Wallet Management
