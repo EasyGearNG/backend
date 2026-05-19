@@ -84,14 +84,11 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array',
+                'images' => 'nullable|array|max:5',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
             ]);
 
-            $uploadedImages = array_values(array_filter(
-                (array) $request->file('images', []),
-                fn($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
-            ));
+            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
@@ -200,16 +197,13 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array',
+                'images' => 'nullable|array|max:5',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
                 'remove_images' => 'nullable|array',
                 'remove_images.*' => 'exists:product_images,id'
             ]);
 
-            $uploadedImages = array_values(array_filter(
-                (array) $request->file('images', []),
-                fn($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
-            ));
+            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
@@ -426,5 +420,21 @@ class VendorProductController extends Controller
             }
             $image->delete();
         }
+    }
+
+    /**
+     * Normalize uploaded files array for images.
+     */
+    private function normalizeUploadedFiles($files): array
+    {
+        if ($files instanceof \Illuminate\Http\UploadedFile) {
+            return [$files];
+        }
+
+        return collect((array) $files)
+            ->flatten()
+            ->filter(fn ($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid())
+            ->values()
+            ->all();
     }
 }
