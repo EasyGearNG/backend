@@ -88,7 +88,12 @@ class VendorProductController extends Controller
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
             ]);
 
-            if ($request->hasFile('images') && count(array_filter($request->file('images'))) > 5) {
+            $uploadedImages = array_values(array_filter(
+                (array) $request->file('images', []),
+                fn($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
+            ));
+
+            if (count($uploadedImages) > 5) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -114,9 +119,8 @@ class VendorProductController extends Controller
                 'status' => $request->status,
             ]);
 
-            // Handle image uploads
-            if ($request->hasFile('images')) {
-                $this->uploadProductImages($product, $request->file('images'));
+            if (!empty($uploadedImages)) {
+                $this->uploadProductImages($product, $uploadedImages);
             }
 
             $product->load(['category', 'images']);
@@ -202,7 +206,12 @@ class VendorProductController extends Controller
                 'remove_images.*' => 'exists:product_images,id'
             ]);
 
-            if ($request->hasFile('images') && count(array_filter($request->file('images'))) > 5) {
+            $uploadedImages = array_values(array_filter(
+                (array) $request->file('images', []),
+                fn($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid()
+            ));
+
+            if (count($uploadedImages) > 5) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -231,9 +240,8 @@ class VendorProductController extends Controller
                 $this->removeProductImages($product, $request->remove_images);
             }
 
-            // Handle new image uploads
-            if ($request->hasFile('images')) {
-                $this->uploadProductImages($product, $request->file('images'));
+            if (!empty($uploadedImages)) {
+                $this->uploadProductImages($product, $uploadedImages);
             }
 
             $product->load(['category', 'images']);
@@ -392,7 +400,7 @@ class VendorProductController extends Controller
      */
     private function uploadProductImages(Product $product, array $images): void
     {
-        foreach (array_filter($images) as $image) {
+        foreach ($images as $image) {
             $path = $image->store('products', 'public');
             
             ProductImage::create([
