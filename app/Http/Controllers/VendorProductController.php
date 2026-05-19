@@ -75,8 +75,7 @@ class VendorProductController extends Controller
         try {
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
-            $validationData = array_merge($request->all(), ['images' => $uploadedImages]);
-            $validator = Validator::make($validationData, [
+            $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
                 'description' => 'required|string',
@@ -87,9 +86,7 @@ class VendorProductController extends Controller
                 'weight' => 'nullable|numeric|min:0',
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
-                'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array',
-                'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
+                'status' => 'required|in:active,inactive,draft'
             ]);
 
             if ($validator->fails()) {
@@ -197,8 +194,7 @@ class VendorProductController extends Controller
 
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
-            $validationData = array_merge($request->all(), ['images' => $uploadedImages]);
-            $validator = Validator::make($validationData, [
+            $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
                 'description' => 'required|string',
@@ -210,8 +206,6 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array',
-                'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
                 'remove_images' => 'nullable|array',
                 'remove_images.*' => 'exists:product_images,id'
             ]);
