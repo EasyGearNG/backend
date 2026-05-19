@@ -72,6 +72,9 @@ class VendorProductController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
+            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            $request->merge(['images' => $uploadedImages]);
+
             $request->validate([
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
@@ -84,11 +87,9 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array|max:5',
+                'images' => 'nullable|array',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
             ]);
-
-            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
@@ -185,6 +186,9 @@ class VendorProductController extends Controller
             
             $product = Product::where('vendor_id', $vendorId)->findOrFail($id);
 
+            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            $request->merge(['images' => $uploadedImages]);
+
             $request->validate([
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
@@ -197,13 +201,11 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array|max:5',
+                'images' => 'nullable|array',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
                 'remove_images' => 'nullable|array',
                 'remove_images.*' => 'exists:product_images,id'
             ]);
-
-            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
