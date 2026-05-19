@@ -84,9 +84,17 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array|max:5',
+                'images' => 'nullable|array',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
             ]);
+
+            if ($request->hasFile('images') && count(array_filter($request->file('images'))) > 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                ], 422);
+            }
 
             $vendorId = Auth::user()->vendor->id;
 
@@ -188,11 +196,19 @@ class VendorProductController extends Controller
                 'dimensions' => 'nullable|string|max:100',
                 'is_featured' => 'boolean',
                 'status' => 'required|in:active,inactive,draft',
-                'images' => 'nullable|array|max:5',
+                'images' => 'nullable|array',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048',
                 'remove_images' => 'nullable|array',
                 'remove_images.*' => 'exists:product_images,id'
             ]);
+
+            if ($request->hasFile('images') && count(array_filter($request->file('images'))) > 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                ], 422);
+            }
 
             $product->update([
                 'name' => $request->name,
@@ -376,7 +392,7 @@ class VendorProductController extends Controller
      */
     private function uploadProductImages(Product $product, array $images): void
     {
-        foreach ($images as $image) {
+        foreach (array_filter($images) as $image) {
             $path = $image->store('products', 'public');
             
             ProductImage::create([
