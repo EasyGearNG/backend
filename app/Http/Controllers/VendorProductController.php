@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class VendorProductController extends Controller
@@ -73,9 +74,9 @@ class VendorProductController extends Controller
     {
         try {
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
-            $request->merge(['images' => $uploadedImages]);
 
-            $request->validate([
+            $validationData = array_merge($request->all(), ['images' => $uploadedImages]);
+            $validator = Validator::make($validationData, [
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
                 'description' => 'required|string',
@@ -90,6 +91,14 @@ class VendorProductController extends Controller
                 'images' => 'nullable|array',
                 'images.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
             ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
@@ -187,9 +196,9 @@ class VendorProductController extends Controller
             $product = Product::where('vendor_id', $vendorId)->findOrFail($id);
 
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
-            $request->merge(['images' => $uploadedImages]);
 
-            $request->validate([
+            $validationData = array_merge($request->all(), ['images' => $uploadedImages]);
+            $validator = Validator::make($validationData, [
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
                 'description' => 'required|string',
@@ -206,6 +215,14 @@ class VendorProductController extends Controller
                 'remove_images' => 'nullable|array',
                 'remove_images.*' => 'exists:product_images,id'
             ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
 
             if (count($uploadedImages) > 5) {
                 return response()->json([
