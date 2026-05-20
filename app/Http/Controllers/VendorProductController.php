@@ -105,6 +105,15 @@ class VendorProductController extends Controller
                 ], 422);
             }
 
+            $imageErrors = $this->validateUploadedImages($uploadedImages);
+            if (!empty($imageErrors)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => $imageErrors]
+                ], 422);
+            }
+
             $vendorId = Auth::user()->vendor->id;
 
             $product = Product::create([
@@ -223,6 +232,15 @@ class VendorProductController extends Controller
                     'success' => false,
                     'message' => 'Validation failed',
                     'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                ], 422);
+            }
+
+            $imageErrors = $this->validateUploadedImages($uploadedImages);
+            if (!empty($imageErrors)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => $imageErrors]
                 ], 422);
             }
 
@@ -449,5 +467,33 @@ class VendorProductController extends Controller
             ->filter(fn ($file) => $file instanceof \Illuminate\Http\UploadedFile && $file->isValid())
             ->values()
             ->all();
+    }
+
+    /**
+     * Validate uploaded image files for size and mime type.
+     */
+    private function validateUploadedImages(array $images): array
+    {
+        $errors = [];
+        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+        $maxSize = 2048 * 1024;
+
+        foreach ($images as $index => $image) {
+            if (!$image instanceof \Illuminate\Http\UploadedFile || !$image->isValid()) {
+                $errors[] = "Image at position {$index} is not a valid upload.";
+                continue;
+            }
+
+            if (!in_array($image->getClientMimeType(), $allowedMimeTypes, true)) {
+                $errors[] = "Image at position {$index} must be jpeg, png, jpg, or webp.";
+                continue;
+            }
+
+            if ($image->getSize() > $maxSize) {
+                $errors[] = "Image at position {$index} must not be greater than 2MB.";
+            }
+        }
+
+        return $errors;
     }
 }
