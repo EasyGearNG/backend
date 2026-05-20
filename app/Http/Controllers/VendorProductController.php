@@ -74,7 +74,14 @@ class VendorProductController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
-            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            $rawFiles = $request->file('images', []);
+            Log::info('VendorProductController@store - Raw files from request', [
+                'raw_count' => is_array($rawFiles) ? count($rawFiles) : (is_object($rawFiles) ? 1 : 0),
+                'raw_type' => get_class($rawFiles),
+                'raw_names' => is_array($rawFiles) ? array_map(fn($f) => $f instanceof \Illuminate\Http\UploadedFile ? $f->getClientOriginalName() : 'N/A', $rawFiles) : ($rawFiles instanceof \Illuminate\Http\UploadedFile ? [$rawFiles->getClientOriginalName()] : [])
+            ]);
+            
+            $uploadedImages = $this->normalizeUploadedFiles($rawFiles);
             Log::info('VendorProductController@store - Images received', ['count' => count($uploadedImages)]);
 
             $validator = Validator::make($request->all(), [
@@ -197,7 +204,15 @@ class VendorProductController extends Controller
             
             $product = Product::where('vendor_id', $vendorId)->findOrFail($id);
 
-            $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            $rawFiles = $request->file('images', []);
+            Log::info('VendorProductController@update - Raw files from request', [
+                'product_id' => $id,
+                'raw_count' => is_array($rawFiles) ? count($rawFiles) : (is_object($rawFiles) ? 1 : 0),
+                'raw_type' => get_class($rawFiles),
+                'raw_names' => is_array($rawFiles) ? array_map(fn($f) => $f instanceof \Illuminate\Http\UploadedFile ? $f->getClientOriginalName() : 'N/A', $rawFiles) : ($rawFiles instanceof \Illuminate\Http\UploadedFile ? [$rawFiles->getClientOriginalName()] : [])
+            ]);
+            
+            $uploadedImages = $this->normalizeUploadedFiles($rawFiles);
             Log::info('VendorProductController@update - Images received', ['product_id' => $id, 'count' => count($uploadedImages)]);
 
             $validator = Validator::make($request->all(), [
