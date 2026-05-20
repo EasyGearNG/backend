@@ -75,6 +75,7 @@ class VendorProductController extends Controller
     {
         try {
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            Log::info('VendorProductController@store - Images received', ['count' => count($uploadedImages)]);
 
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
@@ -98,22 +99,9 @@ class VendorProductController extends Controller
                 ], 422);
             }
 
-            if (count($uploadedImages) > 5) {
-                Log::debug('VendorProductController image count exceeded', [
-                    'uploaded_image_count': count($uploadedImages),
-                    'image_names': collect($uploadedImages)->map(fn($image) => $image instanceof \Illuminate\Http\UploadedFile ? $image->getClientOriginalName() : null)->all(),
-                    'raw_images': $request->file('images')
-                });
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
-                ], 422);
-            }
-
             $imageErrors = $this->validateUploadedImages($uploadedImages);
             if (!empty($imageErrors)) {
+                Log::warning('VendorProductController@store - Image validation failed', ['errors' => $imageErrors]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -140,6 +128,7 @@ class VendorProductController extends Controller
             ]);
 
             if (!empty($uploadedImages)) {
+                Log::info('VendorProductController@store - Uploading product images', ['product_id' => $product->id, 'image_count' => count($uploadedImages)]);
                 $this->uploadProductImages($product, $uploadedImages);
             }
 
@@ -209,6 +198,7 @@ class VendorProductController extends Controller
             $product = Product::where('vendor_id', $vendorId)->findOrFail($id);
 
             $uploadedImages = $this->normalizeUploadedFiles($request->file('images', []));
+            Log::info('VendorProductController@update - Images received', ['product_id' => $id, 'count' => count($uploadedImages)]);
 
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
@@ -234,22 +224,9 @@ class VendorProductController extends Controller
                 ], 422);
             }
 
-            if (count($uploadedImages) > 5) {
-                Log::debug('VendorProductController image count exceeded', [
-                    'uploaded_image_count': count($uploadedImages),
-                    'image_names': collect($uploadedImages)->map(fn($image) => $image instanceof \Illuminate\Http\UploadedFile ? $image->getClientOriginalName() : null)->all(),
-                    'raw_images': $request->file('images')
-                });
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
-                ], 422);
-            }
-
             $imageErrors = $this->validateUploadedImages($uploadedImages);
             if (!empty($imageErrors)) {
+                Log::warning('VendorProductController@update - Image validation failed', ['product_id' => $id, 'errors' => $imageErrors]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -279,6 +256,7 @@ class VendorProductController extends Controller
             }
 
             if (!empty($uploadedImages)) {
+                Log::info('VendorProductController@update - Uploading product images', ['product_id' => $id, 'image_count' => count($uploadedImages)]);
                 $this->uploadProductImages($product, $uploadedImages);
             }
 
