@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\ProductImage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -98,6 +99,12 @@ class VendorProductController extends Controller
             }
 
             if (count($uploadedImages) > 5) {
+                Log::debug('VendorProductController image count exceeded', [
+                    'uploaded_image_count': count($uploadedImages),
+                    'image_names': collect($uploadedImages)->map(fn($image) => $image instanceof \Illuminate\Http\UploadedFile ? $image->getClientOriginalName() : null)->all(),
+                    'raw_images': $request->file('images')
+                });
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -228,6 +235,12 @@ class VendorProductController extends Controller
             }
 
             if (count($uploadedImages) > 5) {
+                Log::debug('VendorProductController image count exceeded', [
+                    'uploaded_image_count': count($uploadedImages),
+                    'image_names': collect($uploadedImages)->map(fn($image) => $image instanceof \Illuminate\Http\UploadedFile ? $image->getClientOriginalName() : null)->all(),
+                    'raw_images': $request->file('images')
+                });
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
