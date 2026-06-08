@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\DevToolsController;
 use App\Http\Controllers\Api\WaitlistController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\PaystackWebhookController;
@@ -78,6 +79,16 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
     
     // Paystack Webhooks (public, no authentication)
     Route::post('/webhooks/paystack/transfer', [PaystackWebhookController::class, 'handleTransferWebhook']);
+
+    // TEMPORARY dev tools — no auth, gated by DEV_TOOLS_ENABLED=true in .env. Remove before production.
+    Route::prefix('dev')->middleware('dev-tools')->group(function () {
+        Route::get('/summary', [DevToolsController::class, 'summary']);
+        Route::get('/users', [DevToolsController::class, 'listUsers']);
+        Route::get('/vendors', [DevToolsController::class, 'listVendors']);
+        Route::delete('/users', [DevToolsController::class, 'deleteUserByEmail']);
+        Route::delete('/vendors', [DevToolsController::class, 'deleteVendorByEmail']);
+        Route::delete('/vendors/hard', [DevToolsController::class, 'hardDeleteVendorByEmail']);
+    });
 });
 
 // Protected routes
