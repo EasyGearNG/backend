@@ -78,12 +78,29 @@ class AuthController extends Controller
         });
 
         if ($isVendor) {
+            Log::info('Vendor signup: initiating email verification', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'mail_mailer' => config('mail.default'),
+                'mail_from' => config('mail.from.address'),
+                'app_url' => config('app.url'),
+            ]);
+
+            $verificationEmailSent = false;
+            $verificationEmailError = null;
+
             try {
                 $user->sendEmailVerificationNotification();
-            } catch (\Exception $e) {
-                Log::error('Failed to send vendor verification email', [
+                $verificationEmailSent = true;
+            } catch (\Throwable $e) {
+                $verificationEmailError = $e->getMessage();
+                Log::error('Vendor signup: verification email failed', [
                     'user_id' => $user->id,
+                    'email' => $user->email,
+                    'mail_mailer' => config('mail.default'),
                     'error' => $e->getMessage(),
+                    'exception' => get_class($e),
+                    'trace' => $e->getTraceAsString(),
                 ]);
             }
 
@@ -91,10 +108,13 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Registration successful. Please check your email to verify your address and complete signup.',
+                'message' => $verificationEmailSent
+                    ? 'Registration successful. Please check your email to verify your address and complete signup.'
+                    : 'Registration successful, but we could not send the verification email. Please use resend verification or contact support.',
                 'data' => [
                     'user' => $user,
                     'requires_email_verification' => true,
+                    'verification_email_sent' => $verificationEmailSent,
                     'approval_status' => $user->vendor?->approval_status ?? 'pending',
                 ],
             ], 201);
@@ -526,9 +546,19 @@ class AuthController extends Controller
             ], 422);
         }
 
+        Log::info('Vendor verification resend: request received', [
+            'email' => $request->email,
+            'mail_mailer' => config('mail.default'),
+            'mail_from' => config('mail.from.address'),
+        ]);
+
         $user = User::where('email', $request->email)->where('role', 'vendor')->first();
 
         if (!$user) {
+            Log::info('Vendor verification resend: no vendor account found for email', [
+                'email' => $request->email,
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'If that email is registered as a vendor, a verification link has been sent.',
@@ -536,6 +566,11 @@ class AuthController extends Controller
         }
 
         if ($user->hasVerifiedEmail()) {
+            Log::info('Vendor verification resend: email already verified', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'This email is already verified. You can log in.',
@@ -544,10 +579,14 @@ class AuthController extends Controller
 
         try {
             $user->sendEmailVerificationNotification();
-        } catch (\Exception $e) {
-            Log::error('Failed to resend vendor verification email', [
+        } catch (\Throwable $e) {
+            Log::error('Vendor verification resend: send failed', [
                 'user_id' => $user->id,
+                'email' => $user->email,
+                'mail_mailer' => config('mail.default'),
                 'error' => $e->getMessage(),
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString(),
             ]);
 
             return response()->json([
@@ -555,6 +594,11 @@ class AuthController extends Controller
                 'message' => 'Unable to send verification email. Please try again later.',
             ], 500);
         }
+
+        Log::info('Vendor verification resend: email sent successfully', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+        ]);
 
         return response()->json([
             'success' => true,

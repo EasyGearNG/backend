@@ -7,6 +7,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 
 class VendorVerifyEmail extends Notification
@@ -21,6 +22,14 @@ class VendorVerifyEmail extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $verificationUrl = $this->verificationUrl($notifiable);
+
+        Log::info('Vendor verification email: building message', [
+            'user_id' => $notifiable->getKey(),
+            'email' => $notifiable->getEmailForVerification(),
+            'verification_url' => $verificationUrl,
+            'expires_minutes' => Config::get('auth.verification.expire', 60),
+            'mail_from' => config('mail.from.address'),
+        ]);
 
         return (new MailMessage)
             ->subject('Verify your email — ' . config('app.name'))

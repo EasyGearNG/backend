@@ -10,6 +10,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Auth\Notifications\ResetPassword as ResetPasswordNotification;
 use App\Notifications\VendorVerifyEmail;
+use Illuminate\Support\Facades\Log;
 
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -108,7 +109,39 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function sendEmailVerificationNotification(): void
     {
-        $this->notify(new VendorVerifyEmail);
+        Log::info('Vendor verification email: preparing to send', [
+            'user_id' => $this->id,
+            'email' => $this->email,
+            'role' => $this->role,
+            'email_verified_at' => $this->email_verified_at,
+            'mail_mailer' => config('mail.default'),
+            'mail_from' => config('mail.from.address'),
+            'app_url' => config('app.url'),
+        ]);
+
+        try {
+            $this->notify(new VendorVerifyEmail);
+
+            Log::info('Vendor verification email: sent successfully', [
+                'user_id' => $this->id,
+                'email' => $this->email,
+                'mail_mailer' => config('mail.default'),
+                'note' => config('mail.default') === 'log'
+                    ? 'MAIL_MAILER=log — email written to storage/logs/laravel.log, not delivered to inbox'
+                    : null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Vendor verification email: send failed', [
+                'user_id' => $this->id,
+                'email' => $this->email,
+                'mail_mailer' => config('mail.default'),
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
     }
 
     /**

@@ -11,6 +11,7 @@ use App\Models\Vendor;
 use App\Models\LogisticsCompany;
 use App\Models\VendorStaff;
 use App\Models\User;
+use App\Services\PaystackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -360,6 +361,35 @@ class VendorFulfillmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch stats',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * List Nigerian banks and their Paystack bank codes.
+     */
+    public function listBanks(): JsonResponse
+    {
+        try {
+            $paystackService = new PaystackService();
+            $result = $paystackService->listBanks('NG');
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $result['banks'],
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch banks',
                 'error' => $e->getMessage(),
             ], 500);
         }
