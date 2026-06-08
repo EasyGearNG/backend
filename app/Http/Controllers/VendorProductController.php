@@ -84,6 +84,14 @@ class VendorProductController extends Controller
             $uploadedImages = $this->normalizeUploadedFiles($rawFiles);
             Log::info('VendorProductController@store - Images received', ['count' => count($uploadedImages)]);
 
+            if (count($uploadedImages) > 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                ], 422);
+            }
+
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',
                 'short_description' => 'required|string|max:500',
@@ -214,6 +222,14 @@ class VendorProductController extends Controller
             
             $uploadedImages = $this->normalizeUploadedFiles($rawFiles);
             Log::info('VendorProductController@update - Images received', ['product_id' => $id, 'count' => count($uploadedImages)]);
+
+            if (count($uploadedImages) > 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                ], 422);
+            }
 
             $validator = Validator::make($request->all(), [
                 'name' => 'required|string|max:255',

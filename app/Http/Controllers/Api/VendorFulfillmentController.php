@@ -80,7 +80,10 @@ class VendorFulfillmentController extends Controller
 
             // Add summary statistics
             $stats = [
-                'total_orders' => OrderItem::where('vendor_id', $vendor->id)->count(),
+                'orders_count' => (int) OrderItem::where('vendor_id', $vendor->id)
+                    ->selectRaw('count(distinct order_id) as aggregate')
+                    ->value('aggregate'),
+                'order_items_count' => OrderItem::where('vendor_id', $vendor->id)->count(),
                 'pending' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'pending')->count(),
                 'dispatched' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'dispatched')->count(),
                 'confirmed' => OrderItem::where('vendor_id', $vendor->id)->where('fulfillment_status', 'confirmed')->count(),
@@ -312,7 +315,7 @@ class VendorFulfillmentController extends Controller
     /**
      * Get vendor dashboard stats:
      * - Available wallet balance (earnings not yet withdrawn)
-     * - Total confirmed order count
+     * - Count of distinct orders placed to this vendor
      * - Total product views across all vendor products
      */
     public function getStats(): JsonResponse
@@ -329,20 +332,27 @@ class VendorFulfillmentController extends Controller
 
             $wallet = Wallet::getOrCreate('vendor', $vendor->id);
 
-            $orderCount = OrderItem::where('vendor_id', $vendor->id)
-                ->distinct('order_id')
-                ->count('order_id');
+            $ordersCount = (int) OrderItem::where('vendor_id', $vendor->id)
+                ->selectRaw('count(distinct order_id) as aggregate')
+                ->value('aggregate');
 
             $totalProductViews = (int) $vendor->products()->sum('view_count');
+
+            $totalSales = (float) OrderItem::where('vendor_id', $vendor->id)
+                ->where('fulfillment_status', 'confirmed')
+                ->sum('subtotal');
 
             return response()->json([
                 'success' => true,
                 'data' => [
+                    'approval_status' => $vendor->approval_status,
                     'wallet' => [
                         'available_balance' => $wallet->balance,
                         'pending_balance' => $wallet->pending_balance,
                     ],
-                    'orders_count' => $orderCount,
+                    'orders_count' => $ordersCount,
+                    'order_items_count' => OrderItem::where('vendor_id', $vendor->id)->count(),
+                    'total_sales' => $totalSales,
                     'total_product_views' => $totalProductViews,
                 ],
             ]);
@@ -350,6 +360,95 @@ class VendorFulfillmentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch stats',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get the vendor's saved bank account details.
+     * Available to all authenticated vendors (including pending approval).
+     */
+    public function getBankDetails(): JsonResponse
+    {
+        try {
+            $vendor = $this->resolveVendorProfile();
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'bank_details' => $vendor->bank_details,
+                    'has_bank_details' => !empty($vendor->bank_details),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch bank details',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Create or update the vendor's bank account details.
+     * Available to all authenticated vendors (including pending approval).
+     */
+    public function updateBankDetails(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'bank_name'      => 'required|string|max:255',
+            'account_number' => 'required|string|max:20',
+            'account_name'   => 'required|string|max:255',
+            'bank_code'      => 'nullable|string|max:10',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $vendor = $this->resolveVendorProfile();
+            if (!$vendor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Vendor profile not found',
+                ], 404);
+            }
+
+            $bankDetails = [
+                'bank_name'      => $request->bank_name,
+                'account_number' => $request->account_number,
+                'account_name'   => $request->account_name,
+            ];
+
+            if ($request->filled('bank_code')) {
+                $bankDetails['bank_code'] = $request->bank_code;
+            }
+
+            $vendor->update(['bank_details' => $bankDetails]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bank details saved successfully',
+                'data' => [
+                    'bank_details' => $vendor->fresh()->bank_details,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save bank details',
                 'error' => $e->getMessage(),
             ], 500);
         }
@@ -847,5 +946,19 @@ class VendorFulfillmentController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Resolve the authenticated user's vendor profile (no approval check).
+     */
+    private function resolveVendorProfile(): ?Vendor
+    {
+        $user = auth()->user();
+
+        if ($user->role !== 'vendor') {
+            return null;
+        }
+
+        return $user->vendor;
     }
 }

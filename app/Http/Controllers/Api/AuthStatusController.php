@@ -31,17 +31,25 @@ class AuthStatusController extends Controller
         }
 
         if ($user) {
+            $userData = [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role ?? null,
+            ];
+
+            if ($user->role === 'vendor') {
+                $user->load('vendor');
+                $userData['vendor'] = $user->vendor;
+                $userData['approval_status'] = $user->vendor?->approval_status ?? 'pending';
+            }
+
             return response()->json([
                 'success' => true,
                 'authenticated' => true,
                 'data' => [
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'role' => $user->role ?? null,
-                    ]
-                ]
+                    'user' => $userData,
+                ],
             ]);
         }
 

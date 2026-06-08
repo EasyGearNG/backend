@@ -34,6 +34,14 @@ class VendorMiddleware
             ], 403);
         }
 
+        if ($user->role === 'vendor' && !$user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your email address to access vendor features.',
+                'error_code' => 'email_not_verified',
+            ], 403);
+        }
+
         // Check if user has an associated vendor record
         if (!$user->vendor) {
             return response()->json([
@@ -42,12 +50,12 @@ class VendorMiddleware
             ], 403);
         }
 
-        // Check if vendor account is active
+        // Check if vendor account is approved by admin
         if (!$user->vendor->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Vendor account is not active. Please contact support.',
-                'vendor_status' => $user->vendor->is_active ? 'active' : 'inactive'
+                'message' => 'Your vendor account is pending admin approval. You cannot access vendor features yet.',
+                'approval_status' => 'pending',
             ], 403);
         }
 

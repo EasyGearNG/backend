@@ -42,7 +42,12 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
         Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
         Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+        Route::post('/email/resend-verification', [AuthController::class, 'resendVerificationEmail']);
     });
+
+    Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
+        ->middleware('signed')
+        ->name('verification.verify');
     // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available
     Route::get('/auth/check', [AuthStatusController::class, 'check']);
     
@@ -177,20 +182,32 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // User auth status check route
     Route::get('/user/auth', function (Request $request) {
         $user = $request->user();
+
+        if ($user->role === 'vendor') {
+            $user->load('vendor');
+        }
+
+        $data = [
+            'id' => $user->id,
+            'username' => $user->username,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone_number' => $user->phone_number,
+            'role' => $user->role,
+            'is_active' => $user->is_active,
+            'email_verified_at' => $user->email_verified_at,
+            'created_at' => $user->created_at,
+        ];
+
+        if ($user->role === 'vendor') {
+            $data['vendor'] = $user->vendor;
+            $data['approval_status'] = $user->vendor?->approval_status ?? 'pending';
+        }
+
         return response()->json([
             'success' => true,
             'authenticated' => true,
-            'data' => [
-                'id' => $user->id,
-                'username' => $user->username,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone_number' => $user->phone_number,
-                'role' => $user->role,
-                'is_active' => $user->is_active,
-                'email_verified_at' => $user->email_verified_at,
-                'created_at' => $user->created_at,
-            ]
+            'data' => $data,
         ]);
     });
     
@@ -241,6 +258,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/create', [\App\Http\Controllers\Api\ShipmentController::class, 'createShipment']); // Admin/driver: create shipment and assign order items
         Route::post('/update', [\App\Http\Controllers\Api\ShipmentController::class, 'updateShipment']); // Admin/driver: update shipment location/status
         Route::get('/track/{tracking_id}', [\App\Http\Controllers\Api\ShipmentController::class, 'trackByTrackingId']); // Customer: track by tracking_id
+    });
+
+    // Vendor bank details (authenticated vendors, including pending approval)
+    Route::prefix('vendor')->group(function () {
+        Route::get('/bank-details', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getBankDetails']);
+        Route::put('/bank-details', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'updateBankDetails']);
     });
 
     // Vendor Product Management Routes (vendors only)

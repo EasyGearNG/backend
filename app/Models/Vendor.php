@@ -27,6 +27,19 @@ class Vendor extends Model
         'is_active' => 'boolean',
     ];
 
+    protected $appends = [
+        'approval_status',
+    ];
+
+    /**
+     * Human-readable approval state for the vendor dashboard.
+     * pending — awaiting admin approval; approved — can post products.
+     */
+    public function getApprovalStatusAttribute(): string
+    {
+        return $this->is_active ? 'approved' : 'pending';
+    }
+
     /**
      * Get the user that owns this vendor profile.
      */

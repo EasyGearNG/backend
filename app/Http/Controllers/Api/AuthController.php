@@ -3,15 +3,20 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\VendorWelcome;
 use App\Models\User;
 use App\Models\Vendor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Auth\Events\Verified;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -43,53 +48,80 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = User::create([
-            'name' => $request->name,
-            'username' => $request->username,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'phone_number' => $request->phone_number,
-            'role' => $request->role ?? 'customer',
-            'is_active' => true,
-        ]);
+        $isVendor = $request->role === 'vendor';
 
-        // Create vendor profile if user is registering as a vendor
-        if ($request->role === 'vendor') {
-            Vendor::create([
-                'user_id' => $user->id,
-                'name' => $request->business_name,
-                'contact_email' => $user->email,
-                'contact_phone' => $request->business_phone,
-                'address' => $request->business_address,
-                'commission_rate' => 15.00, // Default commission rate
-                'is_active' => false, // Pending admin approval
+        $user = DB::transaction(function () use ($request, $isVendor) {
+            $user = User::create([
+                'name' => $request->name,
+                'username' => $request->username,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'phone_number' => $request->phone_number,
+                'role' => $request->role ?? 'customer',
+                'is_active' => true,
+                'email_verified_at' => $isVendor ? null : now(),
             ]);
+
+            if ($isVendor) {
+                Vendor::create([
+                    'user_id' => $user->id,
+                    'name' => $request->business_name,
+                    'contact_email' => $user->email,
+                    'contact_phone' => $request->business_phone,
+                    'address' => $request->business_address,
+                    'commission_rate' => 15.00,
+                    'is_active' => false,
+                ]);
+            }
+
+            return $user;
+        });
+
+        if ($isVendor) {
+            try {
+                $user->sendEmailVerificationNotification();
+            } catch (\Exception $e) {
+                Log::error('Failed to send vendor verification email', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            $user->load('vendor');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registration successful. Please check your email to verify your address and complete signup.',
+                'data' => [
+                    'user' => $user,
+                    'requires_email_verification' => true,
+                    'approval_status' => $user->vendor?->approval_status ?? 'pending',
+                ],
+            ], 201);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // Store token in HTTP-only cookie
         $response = response()->json([
             'success' => true,
             'message' => 'User registered successfully',
             'data' => [
                 'user' => $user->load('addresses'),
                 'token' => $token,
-                'token_type' => 'Bearer'
-            ]
+                'token_type' => 'Bearer',
+            ],
         ], 201);
 
-        // Set access token cookie (HTTP-only for security)
         $response->cookie(
             'access_token',
             $token,
-            config('session.lifetime', 120), // Cookie lifetime in minutes
-            '/', // Path
-            null, // Domain
-            true, // Secure (HTTPS only in production)
-            true, // HTTP-only
-            false, // Raw
-            'Strict' // SameSite
+            config('session.lifetime', 120),
+            '/',
+            null,
+            true,
+            true,
+            false,
+            'Strict'
         );
 
         return $response;
@@ -132,17 +164,33 @@ class AuthController extends Controller
             ], 403);
         }
 
+        if ($user->role === 'vendor' && !$user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please verify your email address before logging in. Check your inbox for the verification link.',
+                'error_code' => 'email_not_verified',
+            ], 403);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
+
+        $user->load($user->role === 'vendor' ? ['vendor', 'addresses'] : 'addresses');
+
+        $loginData = [
+            'user' => $user,
+            'token' => $token,
+            'token_type' => 'Bearer',
+        ];
+
+        if ($user->role === 'vendor' && $user->vendor) {
+            $loginData['approval_status'] = $user->vendor->approval_status;
+        }
 
         // Store token in HTTP-only cookie
         $response = response()->json([
             'success' => true,
             'message' => 'Login successful',
-            'data' => [
-                'user' => $user->load('addresses'),
-                'token' => $token,
-                'token_type' => 'Bearer'
-            ]
+            'data' => $loginData,
         ], 200);
 
         // Set access token cookie (HTTP-only for security)
@@ -166,12 +214,19 @@ class AuthController extends Controller
      */
     public function profile(Request $request)
     {
+        $user = $request->user();
+        $user->load($user->role === 'vendor' ? ['vendor', 'addresses'] : 'addresses');
+
+        $data = ['user' => $user];
+
+        if ($user->role === 'vendor' && $user->vendor) {
+            $data['approval_status'] = $user->vendor->approval_status;
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'User profile retrieved successfully',
-            'data' => [
-                'user' => $request->user()->load('addresses')
-            ]
+            'data' => $data,
         ], 200);
     }
 
@@ -380,6 +435,131 @@ class AuthController extends Controller
         );
 
         return $response;
+    }
+
+    /**
+     * Verify vendor email (signed link from email).
+     */
+    public function verifyEmail(Request $request, $id, $hash): JsonResponse|\Illuminate\Http\RedirectResponse
+    {
+        if (!$request->hasValidSignature()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This verification link is invalid or has expired.',
+                ], 403);
+            }
+
+            return redirect(rtrim(config('frontend.url'), '/') . '/verify-email?status=invalid');
+        }
+
+        $user = User::with('vendor')->findOrFail($id);
+
+        if (!hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid verification link.',
+            ], 403);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            $payload = [
+                'success' => true,
+                'message' => 'Email already verified.',
+                'data' => ['already_verified' => true],
+            ];
+
+            if ($request->expectsJson()) {
+                return response()->json($payload);
+            }
+
+            return redirect(rtrim(config('frontend.url'), '/') . '/verify-email?status=already_verified');
+        }
+
+        $user->markEmailAsVerified();
+        event(new Verified($user));
+
+        if ($user->role === 'vendor') {
+            try {
+                Mail::to($user->email)->send(new VendorWelcome(
+                    $user,
+                    $user->vendor?->name
+                ));
+            } catch (\Exception $e) {
+                Log::warning('Failed to send vendor welcome email', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($request->expectsJson()) {
+            $user = $user->fresh()->load('vendor');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email verified successfully. You can now log in.',
+                'data' => [
+                    'user' => $user,
+                    'approval_status' => $user->vendor?->approval_status ?? 'pending',
+                ],
+            ]);
+        }
+
+        return redirect(rtrim(config('frontend.url'), '/') . '/verify-email?status=success');
+    }
+
+    /**
+     * Resend vendor email verification link.
+     */
+    public function resendVerificationEmail(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation errors',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)->where('role', 'vendor')->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => true,
+                'message' => 'If that email is registered as a vendor, a verification link has been sent.',
+            ]);
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'This email is already verified. You can log in.',
+            ]);
+        }
+
+        try {
+            $user->sendEmailVerificationNotification();
+        } catch (\Exception $e) {
+            Log::error('Failed to resend vendor verification email', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to send verification email. Please try again later.',
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Verification email sent. Please check your inbox.',
+        ]);
     }
 
     /**
