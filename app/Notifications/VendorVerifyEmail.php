@@ -43,7 +43,8 @@ class VendorVerifyEmail extends Notification
 
     protected function verificationUrl(object $notifiable): string
     {
-        return URL::temporarySignedRoute(
+        // Generate the API signed URL for verification
+        $apiUrl = URL::temporarySignedRoute(
             'verification.verify',
             Carbon::now()->addMinutes(Config::get('auth.verification.expire', 60)),
             [
@@ -51,5 +52,14 @@ class VendorVerifyEmail extends Notification
                 'hash' => sha1($notifiable->getEmailForVerification()),
             ]
         );
+
+        // Extract query parameters from the signed URL
+        $parsedUrl = parse_url($apiUrl);
+        $queryString = $parsedUrl['query'] ?? '';
+
+        // Build frontend URL with the same parameters
+        $frontendUrl = rtrim(config('frontend.url'), '/') . '/verify-email?' . $queryString;
+
+        return $frontendUrl;
     }
 }
