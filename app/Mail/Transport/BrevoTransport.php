@@ -40,9 +40,10 @@ class BrevoTransport extends AbstractTransport
         if ($from) {
             $fromAddresses = [];
             foreach ($from as $address) {
+                $name = $address->getName() ?: $address->getAddress();
                 $fromAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
+                    'name' => $name,
                 ];
             }
             $sendSmtpEmail->setSender($fromAddresses[0]);
@@ -53,7 +54,7 @@ class BrevoTransport extends AbstractTransport
             if ($defaultFrom) {
                 $sendSmtpEmail->setSender([
                     'email' => $defaultFrom,
-                    'name' => $defaultName ?: '',
+                    'name' => $defaultName ?: $defaultFrom,
                 ]);
             }
         }
@@ -61,9 +62,10 @@ class BrevoTransport extends AbstractTransport
         // Set recipients
         $toAddresses = [];
         foreach ($email->getTo() as $address) {
+            $name = $address->getName() ?: $address->getAddress();
             $toAddresses[] = [
                 'email' => $address->getAddress(),
-                'name' => $address->getName() ?: '',
+                'name' => $name,
             ];
         }
         $sendSmtpEmail->setTo($toAddresses);
@@ -72,9 +74,10 @@ class BrevoTransport extends AbstractTransport
         if ($email->getCc()) {
             $ccAddresses = [];
             foreach ($email->getCc() as $address) {
+                $name = $address->getName() ?: $address->getAddress();
                 $ccAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
+                    'name' => $name,
                 ];
             }
             $sendSmtpEmail->setCc($ccAddresses);
@@ -84,9 +87,10 @@ class BrevoTransport extends AbstractTransport
         if ($email->getBcc()) {
             $bccAddresses = [];
             foreach ($email->getBcc() as $address) {
+                $name = $address->getName() ?: $address->getAddress();
                 $bccAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
+                    'name' => $name,
                 ];
             }
             $sendSmtpEmail->setBcc($bccAddresses);
@@ -96,9 +100,10 @@ class BrevoTransport extends AbstractTransport
         if ($email->getReplyTo()) {
             $replyToAddresses = [];
             foreach ($email->getReplyTo() as $address) {
+                $name = $address->getName() ?: $address->getAddress();
                 $replyToAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getName() ?: '',
+                    'name' => $name,
                 ];
             }
             $sendSmtpEmail->setReplyTo($replyToAddresses[0]);
