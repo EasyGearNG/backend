@@ -42,7 +42,7 @@ class BrevoTransport extends AbstractTransport
             foreach ($from as $address) {
                 $fromAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getDisplayName(),
+                    'name' => $address->getName() ?: '',
                 ];
             }
             $sendSmtpEmail->setFrom($fromAddresses[0]);
@@ -63,7 +63,7 @@ class BrevoTransport extends AbstractTransport
         foreach ($email->getTo() as $address) {
             $toAddresses[] = [
                 'email' => $address->getAddress(),
-                'name' => $address->getDisplayName(),
+                'name' => $address->getName() ?: '',
             ];
         }
         $sendSmtpEmail->setTo($toAddresses);
@@ -74,7 +74,7 @@ class BrevoTransport extends AbstractTransport
             foreach ($email->getCc() as $address) {
                 $ccAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getDisplayName(),
+                    'name' => $address->getName() ?: '',
                 ];
             }
             $sendSmtpEmail->setCc($ccAddresses);
@@ -86,7 +86,7 @@ class BrevoTransport extends AbstractTransport
             foreach ($email->getBcc() as $address) {
                 $bccAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getDisplayName(),
+                    'name' => $address->getName() ?: '',
                 ];
             }
             $sendSmtpEmail->setBcc($bccAddresses);
@@ -98,7 +98,7 @@ class BrevoTransport extends AbstractTransport
             foreach ($email->getReplyTo() as $address) {
                 $replyToAddresses[] = [
                     'email' => $address->getAddress(),
-                    'name' => $address->getDisplayName(),
+                    'name' => $address->getName() ?: '',
                 ];
             }
             $sendSmtpEmail->setReplyTo($replyToAddresses[0]);
