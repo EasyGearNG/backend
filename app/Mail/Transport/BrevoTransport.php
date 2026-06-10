@@ -4,6 +4,7 @@ namespace App\Mail\Transport;
 
 use Symfony\Component\Mailer\SmailerTransport;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
+use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mime\Email;
 use Brevo\Client\Configuration;
 use Brevo\Client\Api\TransactionalEmailsApi;
@@ -22,8 +23,10 @@ class BrevoTransport extends AbstractTransport
     /**
      * {@inheritdoc}
      */
-    protected function doSend(Email $email): void
+    protected function doSend(SentMessage $message): void
     {
+        $email = $message->getOriginalMessage();
+
         $config = Configuration::getDefaultConfiguration()
             ->setApiKey('api-key', $this->apiKey);
 
