@@ -2,13 +2,13 @@
 
 namespace App\Mail\Transport;
 
-use Symfony\Component\Mailer\SmailerTransport;
 use Symfony\Component\Mailer\Transport\AbstractTransport;
 use Symfony\Component\Mailer\SentMessage;
 use Symfony\Component\Mime\Email;
 use Brevo\Client\Configuration;
 use Brevo\Client\Api\TransactionalEmailsApi;
 use Brevo\Client\Model\SendSmtpEmail;
+use Illuminate\Support\Facades\Config;
 
 class BrevoTransport extends AbstractTransport
 {
@@ -35,16 +35,27 @@ class BrevoTransport extends AbstractTransport
         $sendSmtpEmail = new SendSmtpEmail();
         $sendSmtpEmail->setSubject($email->getSubject());
         
-        // Set sender
-        if ($email->getFrom()) {
+        // Set sender - get from email or use config default
+        $from = $email->getFrom();
+        if ($from) {
             $fromAddresses = [];
-            foreach ($email->getFrom() as $address) {
+            foreach ($from as $address) {
                 $fromAddresses[] = [
                     'email' => $address->getAddress(),
                     'name' => $address->getDisplayName(),
                 ];
             }
             $sendSmtpEmail->setFrom($fromAddresses[0]);
+        } else {
+            // Use default from config if not set
+            $defaultFrom = Config::get('mail.from.address');
+            $defaultName = Config::get('mail.from.name');
+            if ($defaultFrom) {
+                $sendSmtpEmail->setFrom([
+                    'email' => $defaultFrom,
+                    'name' => $defaultName ?: '',
+                ]);
+            }
         }
 
         // Set recipients
