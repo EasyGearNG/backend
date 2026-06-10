@@ -45,13 +45,13 @@ class BrevoTransport extends AbstractTransport
                     'name' => $address->getName() ?: '',
                 ];
             }
-            $sendSmtpEmail->setFrom($fromAddresses[0]);
+            $sendSmtpEmail->setSender($fromAddresses[0]);
         } else {
             // Use default from config if not set
             $defaultFrom = Config::get('mail.from.address');
             $defaultName = Config::get('mail.from.name');
             if ($defaultFrom) {
-                $sendSmtpEmail->setFrom([
+                $sendSmtpEmail->setSender([
                     'email' => $defaultFrom,
                     'name' => $defaultName ?: '',
                 ]);
