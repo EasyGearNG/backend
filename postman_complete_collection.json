@@ -373,6 +373,88 @@
       ]
     },
     {
+      "name": "Vendor",
+      "item": [
+        {
+          "name": "Get Nigerian Banks",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/banks",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "banks"]
+            },
+            "description": "Returns a list of Nigerian banks with their Paystack bank codes. Use this to get the correct bank_code before saving bank details."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Vendor Bank Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/bank-details",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "bank-details"]
+            },
+            "description": "Retrieve the authenticated vendor's saved bank account details."
+          },
+          "response": []
+        },
+        {
+          "name": "Create / Update Vendor Bank Details",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bank_name\": \"GTBank\",\n  \"account_number\": \"0123456789\",\n  \"account_name\": \"John Doe\",\n  \"bank_code\": \"058\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/vendor/bank-details",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "bank-details"]
+            },
+            "description": "Create or update the authenticated vendor's bank account details. bank_code is optional but required for Paystack withdrawals. Use GET /vendor/banks to find the correct bank_code."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Products",
       "item": [
         {

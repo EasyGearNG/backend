@@ -53,12 +53,18 @@ class VendorVerifyEmail extends Notification
             ]
         );
 
-        // Extract query parameters from the signed URL
+        // Extract expires/signature from the signed URL
         $parsedUrl = parse_url($apiUrl);
-        $queryString = $parsedUrl['query'] ?? '';
+        parse_str($parsedUrl['query'] ?? '', $queryParams);
+
+        // The signed route encodes id/hash as path segments, which get lost when
+        // linking to the frontend page instead of the API route directly. Carry the
+        // userId and plaintext email separately so the frontend can complete verification.
+        $queryParams['userId'] = $notifiable->getKey();
+        $queryParams['email'] = $notifiable->getEmailForVerification();
 
         // Build frontend URL with the same parameters
-        $frontendUrl = rtrim(config('frontend.url'), '/') . '/verify-email?' . $queryString;
+        $frontendUrl = rtrim(config('frontend.url'), '/') . '/verify-email?' . http_build_query($queryParams);
 
         return $frontendUrl;
     }
