@@ -396,6 +396,52 @@ class VendorFulfillmentController extends Controller
     }
 
     /**
+     * Resolve a bank account number to its account name via Paystack.
+     * Used to auto-fill the account name as the vendor types their account number.
+     */
+    public function resolveBankAccount(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'account_number' => 'required|string|size:10',
+            'bank_code'      => 'required|string|max:10',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $paystackService = new PaystackService();
+            $result = $paystackService->resolveAccountNumber($request->account_number, $request->bank_code);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'account_number' => $result['account_number'],
+                        'account_name'   => $result['account_name'],
+                    ],
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to resolve account',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get the vendor's saved bank account details.
      * Available to all authenticated vendors (including pending approval).
      */

@@ -277,6 +277,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     // Vendor bank details (authenticated vendors, including pending approval)
     Route::prefix('vendor')->group(function () {
         Route::get('/banks', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'listBanks']);
+        Route::get('/resolve-account', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'resolveBankAccount']);
         Route::get('/bank-details', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'getBankDetails']);
         Route::put('/bank-details', [\App\Http\Controllers\Api\VendorFulfillmentController::class, 'updateBankDetails']);
     });
