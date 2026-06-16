@@ -43,28 +43,23 @@ class VendorVerifyEmail extends Notification
 
     protected function verificationUrl(object $notifiable): string
     {
-        // Generate the API signed URL for verification
+        // Generate the API signed URL for verification. Since the 'verification.verify'
+        // route has no path placeholders, userId/email are appended as query parameters
+        // and included in the signature.
         $apiUrl = URL::temporarySignedRoute(
             'verification.verify',
             Carbon::now()->addMinutes(Config::get('auth.verification.expire', 60)),
             [
-                'id' => $notifiable->getKey(),
-                'hash' => sha1($notifiable->getEmailForVerification()),
+                'userId' => $notifiable->getKey(),
+                'email' => $notifiable->getEmailForVerification(),
             ]
         );
 
-        // Extract expires/signature from the signed URL
+        // Build the frontend URL using the same query string (userId, email, expires, signature)
         $parsedUrl = parse_url($apiUrl);
-        parse_str($parsedUrl['query'] ?? '', $queryParams);
+        $queryString = $parsedUrl['query'] ?? '';
 
-        // The signed route encodes id/hash as path segments, which get lost when
-        // linking to the frontend page instead of the API route directly. Carry the
-        // userId and plaintext email separately so the frontend can complete verification.
-        $queryParams['userId'] = $notifiable->getKey();
-        $queryParams['email'] = $notifiable->getEmailForVerification();
-
-        // Build frontend URL with the same parameters
-        $frontendUrl = rtrim(config('frontend.url'), '/') . '/verify-email?' . http_build_query($queryParams);
+        $frontendUrl = rtrim(config('frontend.url'), '/') . '/verify-email?' . $queryString;
 
         return $frontendUrl;
     }

@@ -215,7 +215,7 @@ class PaystackService
      * @param string $country Country code (NG for Nigeria, GH for Ghana, etc.)
      * @return array
      */
-    public function listBanks(string $country = 'NG'): array
+    public function listBanks(string $country = 'nigeria'): array
     {
         try {
             $response = Http::withHeaders([

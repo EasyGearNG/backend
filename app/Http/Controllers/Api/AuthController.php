@@ -460,7 +460,7 @@ class AuthController extends Controller
     /**
      * Verify vendor email (signed link from email).
      */
-    public function verifyEmail(Request $request, $id, $hash): JsonResponse|\Illuminate\Http\RedirectResponse
+    public function verifyEmail(Request $request): JsonResponse|\Illuminate\Http\RedirectResponse
     {
         if (!$request->hasValidSignature()) {
             if ($request->expectsJson()) {
@@ -473,9 +473,9 @@ class AuthController extends Controller
             return redirect(rtrim(config('frontend.url'), '/') . '/verify-email?status=invalid');
         }
 
-        $user = User::with('vendor')->findOrFail($id);
+        $user = User::with('vendor')->findOrFail($request->query('userId'));
 
-        if (!hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
+        if (!hash_equals((string) $user->getEmailForVerification(), (string) $request->query('email'))) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid verification link.',

@@ -46,7 +46,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post('/email/resend-verification', [AuthController::class, 'resendVerificationEmail']);
     });
 
-    Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
+    Route::get('/email/verify', [AuthController::class, 'verifyEmail'])
         ->middleware('signed')
         ->name('verification.verify');
     // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available

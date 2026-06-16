@@ -373,7 +373,7 @@ class VendorFulfillmentController extends Controller
     {
         try {
             $paystackService = new PaystackService();
-            $result = $paystackService->listBanks('NG');
+            $result = $paystackService->listBanks('nigeria');
 
             if ($result['success']) {
                 return response()->json([
