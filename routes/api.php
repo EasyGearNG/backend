@@ -36,6 +36,7 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
             'message' => 'Easygear API is running'
         ]);
     });
+
     
     // Authentication routes (stricter rate limiting)
     Route::middleware('throttle:5,1')->group(function () {
@@ -46,8 +47,10 @@ Route::prefix('v1')->middleware('throttle:60,1')->group(function () {
         Route::post('/email/resend-verification', [AuthController::class, 'resendVerificationEmail']);
     });
 
-    Route::get('/email/verify', [AuthController::class, 'verifyEmail'])
-        ->middleware('signed')
+    // Accepts GET (query string, from the emailed link) or POST (JSON body, from the
+    // frontend page). Signature is validated manually in the controller since Laravel's
+    // 'signed' middleware only ever checks the query string, never the body.
+    Route::match(['get', 'post'], '/email/verify', [AuthController::class, 'verifyEmail'])
         ->name('verification.verify');
     // Frontend-friendly auth check (public) — returns authenticated: true/false and user when available
     Route::get('/auth/check', [AuthStatusController::class, 'check']);

@@ -462,7 +462,23 @@ class AuthController extends Controller
      */
     public function verifyEmail(Request $request): JsonResponse|\Illuminate\Http\RedirectResponse
     {
-        if (!$request->hasValidSignature()) {
+        // Accept these from the query string (GET, emailed link) or JSON body (POST, frontend call).
+        $userId = $request->input('userId');
+        $email = $request->input('email');
+        $expires = $request->input('expires');
+        $signature = $request->input('signature');
+
+        // Replay the values against a synthetic GET request so we can reuse Laravel's
+        // signed-URL validation, which only inspects a request's query string. Laravel
+        // ksorts parameters when signing (see UrlGenerator::signedRoute), so the same
+        // alphabetical order must be reproduced here for the HMAC to match.
+        $params = ['userId' => $userId, 'email' => $email, 'expires' => $expires];
+        ksort($params);
+        $params['signature'] = $signature;
+
+        $signedRequest = Request::create(route('verification.verify'), 'GET', $params);
+
+        if (!$userId || !$email || !$signature || !$signedRequest->hasValidSignature()) {
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
@@ -473,9 +489,9 @@ class AuthController extends Controller
             return redirect(rtrim(config('frontend.url'), '/') . '/verify-email?status=invalid');
         }
 
-        $user = User::with('vendor')->findOrFail($request->query('userId'));
+        $user = User::with('vendor')->findOrFail($userId);
 
-        if (!hash_equals((string) $user->getEmailForVerification(), (string) $request->query('email'))) {
+        if (!hash_equals((string) $user->getEmailForVerification(), (string) $email)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid verification link.',
