@@ -223,11 +223,20 @@ class VendorProductController extends Controller
             $uploadedImages = $this->normalizeUploadedFiles($rawFiles);
             Log::info('VendorProductController@update - Images received', ['product_id' => $id, 'count' => count($uploadedImages)]);
 
-            if (count($uploadedImages) > 5) {
+            $existingCount = $product->images()->count();
+            $removeCount   = count((array) $request->input('remove_images', []));
+            $totalAfter    = $existingCount - $removeCount + count($uploadedImages);
+
+            if ($totalAfter > 5) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
-                    'errors' => ['images' => ['You may upload a maximum of 5 images.']]
+                    'errors' => ['images' => [
+                        "A product can have at most 5 images. "
+                        . "This product currently has {$existingCount} image(s). "
+                        . "You are removing {$removeCount} and adding " . count($uploadedImages) . ", "
+                        . "which would result in {$totalAfter}. Please remove more or upload fewer."
+                    ]]
                 ], 422);
             }
 
