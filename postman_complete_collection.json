@@ -451,6 +451,147 @@
             "description": "Create or update the authenticated vendor's bank account details. bank_code is optional but required for Paystack withdrawals. Use GET /vendor/banks to find the correct bank_code."
           },
           "response": []
+        },
+        {
+          "name": "Resolve Account Number",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/resolve-account?account_number=0123456789&bank_code=058",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "resolve-account"],
+              "query": [
+                { "key": "account_number", "value": "0123456789", "description": "10-digit account number" },
+                { "key": "bank_code", "value": "058", "description": "Bank code from GET /vendor/banks. Use 001 in test mode." }
+              ]
+            },
+            "description": "Resolve an account number to its account name via Paystack. Call this as the vendor types their account number to auto-fill the account_name field. NOTE: In test mode, only bank_code=001 works reliably."
+          },
+          "response": []
+        },
+        {
+          "name": "List My Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/products",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "products"]
+            },
+            "description": "List all products belonging to the authenticated vendor."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product (with Images)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Product Name", "type": "text" },
+                { "key": "short_description", "value": "Short description (max 500 chars)", "type": "text" },
+                { "key": "description", "value": "Full product description", "type": "text" },
+                { "key": "price", "value": "5000", "type": "text" },
+                { "key": "quantity", "value": "10", "type": "text" },
+                { "key": "category_id", "value": "1", "type": "text" },
+                { "key": "status", "value": "active", "type": "text", "description": "active | inactive | draft" },
+                { "key": "sku", "value": "", "type": "text", "description": "Optional — auto-generated if blank" },
+                { "key": "weight", "value": "0.5", "type": "text", "description": "Optional, kg" },
+                { "key": "images[]", "type": "file", "description": "Up to 5 images (jpeg/png/webp, max 2MB each). Add multiple rows named images[] for multiple files." }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/vendor/products",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "products"]
+            },
+            "description": "Create a new product. Use multipart/form-data. Add multiple images[] rows in Postman for multiple images (max 5). The response images[] array contains all uploaded images — use that for the gallery, and primary_image for the cover/thumbnail. Do NOT use the root image_url field (always null for vendor products)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "products", "1"]
+            },
+            "description": "Get a specific product by ID (must belong to the authenticated vendor)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product (Add / Remove Images)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Updated Product Name", "type": "text" },
+                { "key": "short_description", "value": "Updated short description", "type": "text" },
+                { "key": "description", "value": "Updated full description", "type": "text" },
+                { "key": "price", "value": "5500", "type": "text" },
+                { "key": "quantity", "value": "8", "type": "text" },
+                { "key": "category_id", "value": "1", "type": "text" },
+                { "key": "status", "value": "active", "type": "text" },
+                { "key": "remove_images[]", "value": "84", "type": "text", "description": "IDs of existing images to DELETE (from images[].id in the product response). Add multiple rows for multiple deletions." },
+                { "key": "images[]", "type": "file", "description": "New image files to ADD. Existing images not in remove_images[] are kept. Max total 5 images." }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/vendor/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "products", "1"]
+            },
+            "description": "Update product details and manage images simultaneously. To remove images pass their IDs in remove_images[] (get IDs from the product's images[].id). To add new images pass files in images[]. Both can be done in the same request."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Accept", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vendor/products/1",
+              "host": ["{{base_url}}"],
+              "path": ["vendor", "products", "1"]
+            },
+            "description": "Delete a product and all its images (must belong to the authenticated vendor)."
+          },
+          "response": []
         }
       ]
     },

@@ -14,6 +14,7 @@ use App\Models\Wallet;
 use App\Models\LogisticsCompany;
 use App\Models\WalletWithdrawal;
 use App\Mail\AdminInvitation;
+use App\Mail\VendorActivated;
 use App\Services\PaystackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -855,6 +856,20 @@ class AdminController extends Controller
             DB::commit();
 
             $statusText = $request->boolean('is_active') ? 'approved' : 'disapproved';
+
+            // Send activation email when enabling a vendor
+            if ($request->boolean('is_active') && $vendor->user) {
+                try {
+                    Mail::to($vendor->user->email)->send(
+                        new VendorActivated($vendor->user, $vendor->name)
+                    );
+                } catch (\Exception $e) {
+                    Log::warning('Failed to send vendor activation email', [
+                        'vendor_id' => $vendor->id,
+                        'error'     => $e->getMessage(),
+                    ]);
+                }
+            }
 
             // Reload the vendor to ensure we have the latest data
             $vendor->refresh();

@@ -447,13 +447,16 @@ class VendorProductController extends Controller
      */
     private function uploadProductImages(Product $product, array $images): void
     {
-        foreach ($images as $image) {
+        $nextOrder = ($product->images()->max('sort_order') ?? -1) + 1;
+
+        foreach ($images as $index => $image) {
             $path = $image->store('products', 'public');
-            
+
             ProductImage::create([
                 'product_id' => $product->id,
                 'image_path' => $path,
-                'alt_text' => $product->name
+                'alt_text'   => $product->name,
+                'sort_order' => $nextOrder + $index,
             ]);
         }
     }
