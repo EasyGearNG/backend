@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\AdminDiscountController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AuthStatusController;
@@ -181,6 +182,13 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         // Paystack Transfer Recipient Management
         Route::get('/paystack/banks', [AdminController::class, 'getPaystackBanks']); // Get list of banks from Paystack
         Route::post('/logistics-companies/{id}/paystack-recipient', [AdminController::class, 'createPaystackRecipient']); // Create Paystack recipient for logistics company
+
+        // Discount Code Management
+        Route::get('/discounts', [AdminDiscountController::class, 'index']);
+        Route::post('/discounts', [AdminDiscountController::class, 'store']);
+        Route::get('/discounts/{id}', [AdminDiscountController::class, 'show']);
+        Route::patch('/discounts/{id}', [AdminDiscountController::class, 'update']);
+        Route::delete('/discounts/{id}', [AdminDiscountController::class, 'destroy']);
     });
 
     // User info route
@@ -262,9 +270,10 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     
     // Checkout routes (authenticated users)
     Route::prefix('checkout')->group(function () {
-        Route::get('/summary', [CheckoutController::class, 'getCheckoutSummary']); // Get checkout summary
-        Route::post('/initialize', [CheckoutController::class, 'initializeCheckout']); // Initialize checkout
-        Route::post('/verify', [CheckoutController::class, 'verifyPayment']); // Verify payment
+        Route::get('/summary', [CheckoutController::class, 'getCheckoutSummary']);            // Get checkout summary (pass ?discount_code= to preview)
+        Route::post('/validate-discount', [CheckoutController::class, 'validateDiscount']);  // Validate a discount code against current cart
+        Route::post('/initialize', [CheckoutController::class, 'initializeCheckout']);       // Initialize checkout (pass discount_code in body to apply)
+        Route::post('/verify', [CheckoutController::class, 'verifyPayment']);                // Verify payment
     });
     
     // Shipment management and tracking

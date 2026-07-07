@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\VendorLowStock;
 use App\Mail\VendorNewOrder;
 use App\Models\Cart;
+use App\Models\Discount;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
@@ -31,14 +32,77 @@ class CheckoutController extends Controller
     }
 
     /**
+     * Validate a discount code against the current cart without committing anything.
+     */
+    public function validateDiscount(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'code' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $user = Auth::user();
+        $cart = Cart::where('user_id', $user->id)->first();
+
+        if (!$cart || $cart->items->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your cart is empty.',
+            ], 400);
+        }
+
+        $discount = Discount::where('code', strtoupper($request->code))->first();
+
+        if (!$discount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid discount code.',
+            ], 422);
+        }
+
+        $subtotal = $cart->total;
+        $error    = $discount->validate($subtotal);
+
+        if ($error) {
+            return response()->json([
+                'success' => false,
+                'message' => $error,
+            ], 422);
+        }
+
+        $discountAmount = $discount->calculate($subtotal);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Discount code applied.',
+            'data'    => [
+                'code'            => $discount->code,
+                'discount_type'   => $discount->discount_type,
+                'discount_value'  => $discount->discount_value,
+                'discount_amount' => $discountAmount,
+                'subtotal_before' => $subtotal,
+                'subtotal_after'  => max(0, $subtotal - $discountAmount),
+            ],
+        ]);
+    }
+
+    /**
      * Initialize checkout process.
      */
     public function initializeCheckout(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'shipping_address_id' => 'required|exists:user_addresses,id',
-            'billing_address_id' => 'nullable|exists:user_addresses,id',
-            'notes' => 'nullable|string|max:500',
+            'billing_address_id'  => 'nullable|exists:user_addresses,id',
+            'notes'               => 'nullable|string|max:500',
+            'discount_code'       => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -78,25 +142,54 @@ class CheckoutController extends Controller
             }
 
             // Calculate totals
-            $subtotal = $cart->total;
+            $subtotal     = $cart->total;
             $shippingCost = $this->calculateShipping($cart);
-            $taxAmount = $this->calculateTax($subtotal);
-            $totalAmount = $subtotal + $shippingCost + $taxAmount;
+            $taxAmount    = $this->calculateTax($subtotal);
+
+            // Resolve and apply discount code if provided
+            $discount       = null;
+            $discountAmount = 0;
+            $discountCode   = null;
+
+            if ($request->filled('discount_code')) {
+                $discount = Discount::where('code', strtoupper($request->discount_code))->first();
+
+                if (!$discount) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid discount code.',
+                    ], 422);
+                }
+
+                $error = $discount->validate($subtotal);
+                if ($error) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $error,
+                    ], 422);
+                }
+
+                $discountAmount = $discount->calculate($subtotal);
+                $discountCode   = $discount->code;
+            }
+
+            $totalAmount = max(0, $subtotal - $discountAmount) + $shippingCost + $taxAmount;
 
             // Create order
             DB::beginTransaction();
 
             $order = Order::create([
-                'user_id' => $user->id,
-                'order_date' => now(),
-                'status' => 'pending',
-                'total_amount' => $totalAmount,
+                'user_id'             => $user->id,
+                'order_date'          => now(),
+                'status'              => 'pending',
+                'total_amount'        => $totalAmount,
                 'shipping_address_id' => $request->shipping_address_id,
-                'billing_address_id' => $request->billing_address_id ?? $request->shipping_address_id,
-                'shipping_cost' => $shippingCost,
-                'tax_amount' => $taxAmount,
-                'discount_amount' => 0,
-                'notes' => $request->notes,
+                'billing_address_id'  => $request->billing_address_id ?? $request->shipping_address_id,
+                'shipping_cost'       => $shippingCost,
+                'tax_amount'          => $taxAmount,
+                'discount_amount'     => $discountAmount,
+                'discount_code'       => $discountCode,
+                'notes'               => $request->notes,
             ]);
 
             // Create order items
@@ -136,14 +229,24 @@ class CheckoutController extends Controller
 
             DB::commit();
 
+            // Increment discount usage only after order is safely committed
+            if ($discount) {
+                $discount->incrementUsage();
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Checkout initialized successfully',
                 'data' => [
-                    'order_id' => $order->id,
-                    'payment_url' => $paymentData['authorization_url'],
-                    'reference' => $paymentData['reference'],
-                    'amount' => $totalAmount,
+                    'order_id'        => $order->id,
+                    'payment_url'     => $paymentData['authorization_url'],
+                    'reference'       => $paymentData['reference'],
+                    'subtotal'        => $subtotal,
+                    'discount_amount' => $discountAmount,
+                    'discount_code'   => $discountCode,
+                    'shipping_cost'   => $shippingCost,
+                    'tax_amount'      => $taxAmount,
+                    'amount'          => $totalAmount,
                 ],
             ], 201);
         } catch (\Exception $e) {
@@ -313,9 +416,9 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Get checkout summary.
+     * Get checkout summary, optionally previewing a discount code.
      */
-    public function getCheckoutSummary(): JsonResponse
+    public function getCheckoutSummary(Request $request): JsonResponse
     {
         try {
             $user = Auth::user();
@@ -328,20 +431,43 @@ class CheckoutController extends Controller
                 ], 400);
             }
 
-            $subtotal = $cart->total;
+            $subtotal     = $cart->total;
             $shippingCost = $this->calculateShipping($cart);
-            $taxAmount = $this->calculateTax($subtotal);
-            $totalAmount = $subtotal + $shippingCost + $taxAmount;
+            $taxAmount    = $this->calculateTax($subtotal);
+
+            $discountAmount  = 0;
+            $discountCode    = null;
+            $discountMessage = null;
+
+            if ($request->filled('discount_code')) {
+                $discount = Discount::where('code', strtoupper($request->discount_code))->first();
+                if (!$discount) {
+                    $discountMessage = 'Invalid discount code.';
+                } else {
+                    $error = $discount->validate($subtotal);
+                    if ($error) {
+                        $discountMessage = $error;
+                    } else {
+                        $discountAmount  = $discount->calculate($subtotal);
+                        $discountCode    = $discount->code;
+                    }
+                }
+            }
+
+            $totalAmount = max(0, $subtotal - $discountAmount) + $shippingCost + $taxAmount;
 
             return response()->json([
                 'success' => true,
                 'message' => 'Checkout summary retrieved successfully',
                 'data' => [
-                    'subtotal' => $subtotal,
-                    'shipping_cost' => $shippingCost,
-                    'tax_amount' => $taxAmount,
-                    'total_amount' => $totalAmount,
-                    'items_count' => $cart->item_count,
+                    'subtotal'         => $subtotal,
+                    'discount_code'    => $discountCode,
+                    'discount_amount'  => $discountAmount,
+                    'discount_message' => $discountMessage,
+                    'shipping_cost'    => $shippingCost,
+                    'tax_amount'       => $taxAmount,
+                    'total_amount'     => $totalAmount,
+                    'items_count'      => $cart->item_count,
                 ],
             ]);
         } catch (\Exception $e) {
