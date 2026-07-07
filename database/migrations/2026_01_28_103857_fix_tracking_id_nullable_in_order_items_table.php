@@ -12,8 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Use raw SQL to modify the column to be nullable
-        DB::statement('ALTER TABLE order_items MODIFY COLUMN tracking_id VARCHAR(255) NULL');
+        // SQLite creates the column nullable from the original migration; only MySQL needs this fix
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE order_items MODIFY COLUMN tracking_id VARCHAR(255) NULL');
+        }
     }
 
     /**
@@ -21,7 +23,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Revert back to NOT NULL (but this might fail if there are null values)
-        DB::statement('ALTER TABLE order_items MODIFY COLUMN tracking_id VARCHAR(255) NOT NULL');
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('ALTER TABLE order_items MODIFY COLUMN tracking_id VARCHAR(255) NOT NULL');
+        }
     }
 };

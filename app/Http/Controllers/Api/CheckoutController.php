@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Mail\VendorLowStock;
+use App\Mail\VendorNewOrder;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -13,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 
 class CheckoutController extends Controller
@@ -234,10 +237,42 @@ class CheckoutController extends Controller
                 // Update order status
                 $order->update(['status' => 'processing']);
 
-                // Update product inventory
+                // Update product inventory and send low-stock alerts
+                $notifiedVendorsForOrder = [];
                 foreach ($order->items as $item) {
                     $product = $item->product;
                     $product->decrement('quantity', $item->quantity);
+                    $product->refresh();
+
+                    // Low stock alert (threshold: 10 units)
+                    if ($product->quantity <= 10 && $product->quantity > 0) {
+                        $vendorUser = $product->vendor?->user;
+                        if ($vendorUser) {
+                            try {
+                                Mail::to($vendorUser->email)->send(new VendorLowStock($vendorUser, $product));
+                            } catch (\Exception $e) {
+                                Log::warning('Failed to send low stock alert', [
+                                    'product_id' => $product->id,
+                                    'error'      => $e->getMessage(),
+                                ]);
+                            }
+                        }
+                    }
+
+                    // New order notification — one per unique vendor
+                    $vendorUser = $item->vendor?->user;
+                    if ($vendorUser && !in_array($vendorUser->id, $notifiedVendorsForOrder)) {
+                        $notifiedVendorsForOrder[] = $vendorUser->id;
+                        try {
+                            Mail::to($vendorUser->email)->send(new VendorNewOrder($vendorUser, $order));
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to send new order notification to vendor', [
+                                'order_id'  => $order->id,
+                                'vendor_id' => $item->vendor_id,
+                                'error'     => $e->getMessage(),
+                            ]);
+                        }
+                    }
                 }
 
                 // Clear user's cart

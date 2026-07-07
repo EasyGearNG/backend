@@ -92,6 +92,9 @@ class AuthController extends Controller
             try {
                 $user->sendEmailVerificationNotification();
                 $verificationEmailSent = true;
+
+                // Send registration welcome email
+                Mail::to($user->email)->send(new VendorWelcome($user, $user->vendor?->name));
             } catch (\Throwable $e) {
                 $verificationEmailError = $e->getMessage();
                 Log::error('Vendor signup: verification email failed', [
@@ -515,19 +518,7 @@ class AuthController extends Controller
         $user->markEmailAsVerified();
         event(new Verified($user));
 
-        if ($user->role === 'vendor') {
-            try {
-                Mail::to($user->email)->send(new VendorWelcome(
-                    $user,
-                    $user->vendor?->name
-                ));
-            } catch (\Exception $e) {
-                Log::warning('Failed to send vendor welcome email', [
-                    'user_id' => $user->id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
+        // Welcome email is sent at registration, not here
 
         if ($request->expectsJson()) {
             $user = $user->fresh()->load('vendor');

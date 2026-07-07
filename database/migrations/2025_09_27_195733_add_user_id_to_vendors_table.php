@@ -2,9 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use App\Models\Vendor;
-use App\Models\User;
 
 return new class extends Migration
 {
@@ -20,20 +19,19 @@ return new class extends Migration
                 $table->foreignId('user_id')->nullable()->after('id');
             });
 
-            // Create users for existing vendors (if any)
-            $vendors = Vendor::all();
+            // Create users for existing vendors (if any) — use DB::table to avoid SoftDeletes scope
+            $vendors = DB::table('vendors')->get();
             foreach ($vendors as $vendor) {
-                // Create a user account for existing vendor
-                $user = User::create([
-                    'name' => $vendor->name,
-                    'email' => $vendor->contact_email,
-                    'password' => bcrypt('temporary123'), // They'll need to reset
-                    'role' => 'vendor',
-                    'is_active' => $vendor->is_active,
+                $userId = DB::table('users')->insertGetId([
+                    'name'       => $vendor->name,
+                    'email'      => $vendor->contact_email,
+                    'password'   => bcrypt('temporary123'),
+                    'role'       => 'vendor',
+                    'is_active'  => $vendor->is_active,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
-
-                // Link the vendor to the user
-                $vendor->update(['user_id' => $user->id]);
+                DB::table('vendors')->where('id', $vendor->id)->update(['user_id' => $userId]);
             }
 
             // Now make the user_id column non-nullable and add the foreign key constraint

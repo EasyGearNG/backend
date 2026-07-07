@@ -49,7 +49,7 @@ return new class extends Migration
         });
 
         // Add unique constraint to slug after ensuring all slugs are populated
-        if (Schema::hasColumn('products', 'slug') && !DB::select("SHOW INDEX FROM products WHERE Key_name = 'products_slug_unique'")) {
+        if (Schema::hasColumn('products', 'slug') && !in_array('products_slug_unique', Schema::getIndexListing('products'))) {
             Schema::table('products', function (Blueprint $table) {
                 $table->unique('slug');
             });

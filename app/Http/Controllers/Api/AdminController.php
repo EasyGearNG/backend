@@ -14,7 +14,12 @@ use App\Models\Wallet;
 use App\Models\LogisticsCompany;
 use App\Models\WalletWithdrawal;
 use App\Mail\AdminInvitation;
+use App\Mail\ProductApproved;
+use App\Mail\ProductFeedback;
 use App\Mail\VendorActivated;
+use App\Mail\VendorNewOrder;
+use App\Mail\VendorOrderCompleted;
+use App\Mail\VendorOrderDelivered;
 use App\Services\PaystackService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -391,14 +396,38 @@ class AdminController extends Controller
         }
 
         try {
-            $order = Order::findOrFail($id);
+            $order = Order::with('items.vendor.user')->findOrFail($id);
             $order->status = $request->status;
-            
+
             if ($request->has('notes')) {
                 $order->notes = $request->notes;
             }
-            
+
             $order->save();
+
+            // Notify each unique vendor in the order when status changes to delivered or completed
+            if (in_array($request->status, ['delivered', 'completed'])) {
+                $notifiedVendors = [];
+                foreach ($order->items as $item) {
+                    $vendorUser = $item->vendor?->user;
+                    if ($vendorUser && !in_array($vendorUser->id, $notifiedVendors)) {
+                        $notifiedVendors[] = $vendorUser->id;
+                        try {
+                            $mail = $request->status === 'delivered'
+                                ? new VendorOrderDelivered($vendorUser, $order)
+                                : new VendorOrderCompleted($vendorUser, $order);
+                            Mail::to($vendorUser->email)->send($mail);
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to send order status email to vendor', [
+                                'order_id'  => $order->id,
+                                'vendor_id' => $item->vendor_id,
+                                'status'    => $request->status,
+                                'error'     => $e->getMessage(),
+                            ]);
+                        }
+                    }
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -629,7 +658,8 @@ class AdminController extends Controller
     public function updateProductStatus(Request $request, $id): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'status' => 'required|in:active,inactive,draft',
+            'status'   => 'required|in:active,inactive,draft',
+            'feedback' => 'nullable|string|max:1000',
         ]);
 
         if ($validator->fails()) {
@@ -641,9 +671,27 @@ class AdminController extends Controller
         }
 
         try {
-            $product = Product::findOrFail($id);
+            $product = Product::with('vendor.user')->findOrFail($id);
             $product->status = $request->status;
             $product->save();
+
+            // Notify vendor of product approval or feedback
+            $vendorUser = $product->vendor?->user;
+            if ($vendorUser) {
+                try {
+                    if ($request->status === 'active') {
+                        Mail::to($vendorUser->email)->send(new ProductApproved($vendorUser, $product));
+                    } elseif (in_array($request->status, ['inactive', 'draft'])) {
+                        Mail::to($vendorUser->email)->send(new ProductFeedback($vendorUser, $product, $request->feedback));
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Failed to send product status email', [
+                        'product_id' => $product->id,
+                        'status'     => $request->status,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
+            }
 
             return response()->json([
                 'success' => true,
